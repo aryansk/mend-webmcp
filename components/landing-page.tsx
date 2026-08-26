@@ -290,7 +290,7 @@ export function LandingPage() {
         <span>© 2026 Mend. Built for the WebMCP Challenge.</span>
         <span className="footer-status">
           <span className="state-dot" />
-          Phase 6 · Branch-first patch application
+            Phase 7 · Before/after verification
         </span>
       </footer>
     </main>

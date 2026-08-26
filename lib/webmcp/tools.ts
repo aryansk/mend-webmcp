@@ -5,6 +5,7 @@ import type {
   Issue,
   ProposedFix,
   Severity,
+  VerificationResult,
 } from "../types";
 import { compareAudits } from "../audit/compare";
 import { asRecord, isAbortError, requestMendApi } from "./api";
@@ -39,6 +40,7 @@ export type MendToolCallbacks = {
   onAudit: (audit: Audit) => void;
   onFix?: (fix: ProposedFix) => void;
   onApply?: (fix: ProposedFix, branch: AppliedFix) => void;
+  onVerify?: (verification: VerificationResult) => void;
 };
 
 export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
@@ -353,6 +355,54 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
             filePaths: branch.filePaths,
             pullRequestUrl: branch.pullRequestUrl,
             sourceMutation: false,
+          };
+        }),
+    },
+    {
+      ...MEND_TOOL_METADATA.verify_fix,
+      execute: (input, context) =>
+        safelyExecute(context, async () => {
+          const values = readRecord(input);
+          const fixId = readRequiredString(values, "fixId");
+          const previewUrl = readOptionalString(values.previewUrl, "previewUrl");
+          const payload = asRecord(
+            await requestMendApi("/api/verify", {
+              body: JSON.stringify({ fixId, previewUrl }),
+              method: "POST",
+              signal: context.signal,
+            }),
+          );
+          const verification = readVerification(payload.verification);
+          const fix = readFix(payload);
+
+          if (payload.beforeAudit && typeof payload.beforeAudit === "object") {
+            cacheAudit(payload.beforeAudit as Audit);
+          }
+
+          if (payload.afterAudit && typeof payload.afterAudit === "object") {
+            cacheAudit(payload.afterAudit as Audit);
+          }
+
+          cacheFix(fix);
+          callbacks.onFix?.(fix);
+          callbacks.onVerify?.(verification);
+
+          return {
+            verified: verification.verified,
+            fixId: verification.fixId,
+            branchName: verification.branchName,
+            mode: verification.mode,
+            previewUrl: verification.previewUrl,
+            beforeAuditId: verification.beforeAuditId,
+            afterAuditId: verification.afterAuditId,
+            before: verification.before,
+            after: verification.after,
+            scoreDelta: verification.scoreDelta,
+            brokenLinksDelta: verification.brokenLinksDelta,
+            resolvedIssueIds: verification.resolvedIssueIds,
+            remainingIssueIds: verification.remainingIssueIds,
+            regressions: verification.regressions,
+            checks: verification.checks,
           };
         }),
     },
@@ -691,6 +741,14 @@ function readAppliedFix(value: unknown): AppliedFix {
   }
 
   return value as AppliedFix;
+}
+
+function readVerification(value: unknown): VerificationResult {
+  if (!value || typeof value !== "object") {
+    throw new Error("The verification service returned no verification result.");
+  }
+
+  return value as VerificationResult;
 }
 
 async function fetchFix(fixId: string, signal: AbortSignal) {

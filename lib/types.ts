@@ -71,6 +71,46 @@ export type AppliedFix = {
   pullRequestUrl: string | null;
 };
 
+export type VerificationCheck = {
+  label: string;
+  status: "passed" | "warning";
+  detail: string;
+};
+
+export type VerificationIssue = Pick<
+  Issue,
+  "id" | "category" | "severity" | "title" | "pageUrl" | "selector" | "sourceHint"
+>;
+
+export type VerificationResult = {
+  id: string;
+  fixId: string;
+  repositoryId: string;
+  branchName: string;
+  mode: "controlled_snapshot";
+  previewUrl: string | null;
+  verified: boolean;
+  verifiedAt: string;
+  beforeAuditId: string;
+  afterAuditId: string;
+  before: {
+    scores: Partial<Record<ScoreKey, number>>;
+    brokenLinks: number;
+    issueCount: number;
+  };
+  after: {
+    scores: Partial<Record<ScoreKey, number>>;
+    brokenLinks: number;
+    issueCount: number;
+  };
+  scoreDelta: Partial<Record<ScoreKey, number>>;
+  brokenLinksDelta: number;
+  resolvedIssueIds: string[];
+  remainingIssueIds: string[];
+  regressions: VerificationIssue[];
+  checks: VerificationCheck[];
+};
+
 export type ProposedFix = {
   id: string;
   repositoryId: string;
@@ -86,6 +126,8 @@ export type ProposedFix = {
   decisionAt?: string;
   applied?: AppliedFix;
   appliedAt?: string;
+  verification?: VerificationResult;
+  verifiedAt?: string;
 };
 
 export type ActivityEvent = {

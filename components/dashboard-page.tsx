@@ -39,6 +39,7 @@ import type {
   Issue,
   ProposedFix,
   ScoreKey,
+  VerificationResult,
 } from "../lib/types";
 
 const scoreCards: Array<{
@@ -125,12 +126,15 @@ export function DashboardPage({
   const [patchVisible, setPatchVisible] = useState(false);
   const [activeFix, setActiveFix] = useState<ProposedFix | null>(null);
   const [appliedBranch, setAppliedBranch] = useState<AppliedFix | null>(null);
+  const [verification, setVerification] = useState<VerificationResult | null>(null);
   const [isProposing, setIsProposing] = useState(false);
   const [isFixDecisionPending, setIsFixDecisionPending] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [notice, setNotice] = useState("");
   const [scanError, setScanError] = useState(initialError ?? "");
   const [fixError, setFixError] = useState("");
+  const [verificationError, setVerificationError] = useState("");
   const [activity, setActivity] = useState(initialActivity);
   const [repository, setRepository] = useState<RepositoryConnection | null>(null);
   const [sourceView, setSourceView] = useState<{
@@ -153,6 +157,7 @@ export function DashboardPage({
       setSourceView(null);
       setActiveFix(null);
       setAppliedBranch(null);
+      setVerification(null);
       setPatchVisible(false);
       setActivity((current) => [
         {
@@ -183,6 +188,7 @@ export function DashboardPage({
   const handleToolFix = useCallback((fix: ProposedFix) => {
     setActiveFix(fix);
     setAppliedBranch(fix.applied ?? null);
+    setVerification(fix.verification ?? null);
     setPatchVisible(true);
     setFixError("");
     setNotice(
@@ -212,6 +218,7 @@ export function DashboardPage({
   const handleToolApply = useCallback((fix: ProposedFix, branch: AppliedFix) => {
     setActiveFix(fix);
     setAppliedBranch(branch);
+    setVerification(null);
     setPatchVisible(true);
     setFixError("");
     setNotice(
@@ -223,6 +230,30 @@ export function DashboardPage({
         label: "Demo branch created",
         detail: branch.branchName + " · commit " + branch.commitSha.slice(0, 8),
         tone: "success",
+        time: "just now",
+      },
+      ...current,
+    ]);
+  }, []);
+
+  const handleToolVerify = useCallback((nextVerification: VerificationResult) => {
+    setVerification(nextVerification);
+    setVerificationError("");
+    setNotice(
+      nextVerification.verified
+        ? "Verification passed. The targeted issues were resolved with no regressions."
+        : "Verification needs review. Mend found unresolved targets or regressions.",
+    );
+    setActivity((current) => [
+      {
+        id: "activity-" + Date.now(),
+        label: nextVerification.verified ? "Verification passed" : "Verification needs review",
+        detail:
+          nextVerification.resolvedIssueIds.length +
+          " resolved · " +
+          nextVerification.regressions.length +
+          " regressions",
+        tone: nextVerification.verified ? "success" : "warning",
         time: "just now",
       },
       ...current,
@@ -451,6 +482,7 @@ export function DashboardPage({
 
       setActiveFix(approvalPayload.fix);
       setAppliedBranch(null);
+      setVerification(null);
       setPatchVisible(true);
       setNotice("A patch is ready. Review it and make the approval decision.");
       setActivity((current) => [
@@ -499,6 +531,7 @@ export function DashboardPage({
 
       setActiveFix(payload.fix);
       setAppliedBranch(null);
+      setVerification(null);
       setNotice(
         decision === "approved"
           ? "Human approval recorded. Review once more, then apply to a safe branch."
@@ -559,6 +592,7 @@ export function DashboardPage({
 
       setActiveFix(payload.fix);
       setAppliedBranch(payload.branch);
+      setVerification(null);
       setNotice(
         "Created " +
           payload.branch.branchName +
@@ -590,12 +624,56 @@ export function DashboardPage({
     }
   }
 
+  async function handleVerifyFix() {
+    if (!activeFix || !appliedBranch) {
+      return;
+    }
+
+    setIsVerifying(true);
+    setVerificationError("");
+
+    try {
+      const response = await fetch("/api/verify", {
+        body: JSON.stringify({
+          fixId: activeFix.id,
+          previewUrl: siteUrl,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json()) as {
+        verification?: VerificationResult;
+        fix?: ProposedFix;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.verification) {
+        throw new Error(payload.error ?? "The applied fix could not be verified.");
+      }
+
+      if (payload.fix) {
+        setActiveFix(payload.fix);
+      }
+
+      handleToolVerify(payload.verification);
+    } catch (error) {
+      setVerificationError(
+        error instanceof Error
+          ? error.message
+          : "The applied fix could not be verified.",
+      );
+    } finally {
+      setIsVerifying(false);
+    }
+  }
+
   return (
     <main className="dashboard-page">
       <WebMcpBridge
         onAudit={handleToolAudit}
         onApply={handleToolApply}
         onFix={handleToolFix}
+        onVerify={handleToolVerify}
         onStatus={handleWebMcpStatus}
       />
       <aside className="dashboard-sidebar">
@@ -666,7 +744,7 @@ export function DashboardPage({
             <p>
               {webmcpStatus.message ??
                 (webmcpStatus.state === "ready"
-                  ? "Audit, source, and human-review tools are available to the active agent."
+                  ? "Audit, source, human-review, and verification tools are available to the active agent."
                   : "Checking whether this browser can expose structured tools to an agent.")}
             </p>
             <div className="status-progress">
@@ -674,7 +752,7 @@ export function DashboardPage({
                 style={{
                   width:
                     webmcpStatus.state === "ready"
-                      ? "75%"
+                      ? "90%"
                       : webmcpStatus.state === "error"
                         ? "25%"
                         : "50%",
@@ -684,7 +762,7 @@ export function DashboardPage({
             <span className="status-progress-label">
               {webmcpStatus.state === "ready"
                   ? webmcpStatus.registeredTools.length + " tools registered"
-                : "Phase 6 of 8"}
+                : "Phase 7 of 8"}
             </span>
             {webmcpStatus.registeredTools.length > 0 ? (
               <div className="webmcp-tool-list" aria-label="Registered WebMCP tools">
@@ -805,6 +883,20 @@ export function DashboardPage({
           </div>
         ) : null}
 
+        {verificationError ? (
+          <div className="dashboard-notice dashboard-notice-error" role="alert">
+            <AlertTriangle width={16} height={16} />
+            <span>{verificationError}</span>
+            <button
+              type="button"
+              onClick={() => setVerificationError("")}
+              aria-label="Dismiss verification error"
+            >
+              <X width={15} height={15} />
+            </button>
+          </div>
+        ) : null}
+
         <div className="score-grid">
           {scoreCards.map((card) => {
             const Icon = card.icon;
@@ -891,6 +983,109 @@ export function DashboardPage({
           </article>
         </div>
 
+        {verification ? (
+          <section className="verification-panel panel" id="verification">
+            <div className="panel-header verification-header">
+              <div>
+                <span className="micro-label">BEFORE / AFTER VERIFICATION</span>
+                <h2>{verification.verified ? "Fix verified" : "Verification needs review"}</h2>
+                <p>
+                  {verification.mode === "controlled_snapshot"
+                    ? "Controlled branch snapshot replay"
+                    : "Preview verification"}
+                  {verification.previewUrl ? " · " + verification.previewUrl : ""}
+                </p>
+              </div>
+              <span
+                className={
+                  "verification-badge " +
+                  (verification.verified
+                    ? "verification-badge-passed"
+                    : "verification-badge-warning")
+                }
+              >
+                {verification.verified ? "PASSED" : "REVIEW"}
+              </span>
+            </div>
+            <div className="verification-metrics">
+              {scoreCards.map((card) => {
+                const beforeScore = verification.before.scores[card.key];
+                const afterScore = verification.after.scores[card.key];
+                const delta = verification.scoreDelta[card.key];
+
+                return (
+                  <div className="verification-metric" key={card.key}>
+                    <span>{card.label}</span>
+                    <strong>
+                      {beforeScore ?? "—"} <small>→</small> {afterScore ?? "—"}
+                    </strong>
+                    <em
+                      className={
+                        delta !== undefined && delta >= 0
+                          ? "delta-positive"
+                          : "delta-neutral"
+                      }
+                    >
+                      {formatDelta(delta)}
+                    </em>
+                  </div>
+                );
+              })}
+              <div className="verification-metric">
+                <span>Broken links</span>
+                <strong>
+                  {verification.before.brokenLinks} <small>→</small>{" "}
+                  {verification.after.brokenLinks}
+                </strong>
+                <em
+                  className={
+                    verification.brokenLinksDelta <= 0
+                      ? "delta-positive"
+                      : "delta-neutral"
+                  }
+                >
+                  {formatDelta(verification.brokenLinksDelta)}
+                </em>
+              </div>
+            </div>
+            <div className="verification-details">
+              <div className="verification-check-list">
+                {verification.checks.map((check) => (
+                  <div className="verification-check" key={check.label}>
+                    <span
+                      className={
+                        "verification-check-icon " +
+                        (check.status === "passed" ? "check-passed" : "check-warning")
+                      }
+                    >
+                      {check.status === "passed" ? (
+                        <Check width={13} height={13} />
+                      ) : (
+                        <AlertTriangle width={13} height={13} />
+                      )}
+                    </span>
+                    <span>
+                      <strong>{check.label}</strong>
+                      <small>{check.detail}</small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="verification-summary-copy">
+                <span className="detail-label">Saved audit chain</span>
+                <code>{verification.beforeAuditId}</code>
+                <span>to</span>
+                <code>{verification.afterAuditId}</code>
+                <small>
+                  {verification.resolvedIssueIds.length} resolved ·{" "}
+                  {verification.remainingIssueIds.length} remaining ·{" "}
+                  {verification.regressions.length} regressions
+                </small>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         <div className="dashboard-grid">
           <section className="issues-panel panel" id="issues">
             <div className="panel-header">
@@ -921,6 +1116,7 @@ export function DashboardPage({
                       setSelectedIssueId(issue.id);
                       setActiveFix(null);
                       setAppliedBranch(null);
+                      setVerification(null);
                       setPatchVisible(false);
                       setNotice("");
                     }}
@@ -1284,6 +1480,25 @@ export function DashboardPage({
                       : "Apply approved patch"}
                 </button>
               ) : null}
+              {appliedBranch ? (
+                <button
+                  className="secondary-button verify-button"
+                  type="button"
+                  onClick={handleVerifyFix}
+                  disabled={isVerifying || Boolean(verification?.verified)}
+                >
+                  {verification?.verified ? (
+                    <Check width={15} height={15} />
+                  ) : (
+                    <Activity width={15} height={15} />
+                  )}
+                  {isVerifying
+                    ? "Verifying…"
+                    : verification?.verified
+                      ? "Verified"
+                      : "Verify branch snapshot"}
+                </button>
+              ) : null}
             </div>
           </section>
         </div>
@@ -1319,6 +1534,14 @@ function formatPage(value: string) {
   } catch {
     return value;
   }
+}
+
+function formatDelta(value: number | undefined) {
+  if (value === undefined) {
+    return "—";
+  }
+
+  return (value > 0 ? "+" : "") + value;
 }
 
 function getWebMcpStatusLabel(state: WebMcpStatus["state"]) {

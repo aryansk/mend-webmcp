@@ -62,6 +62,7 @@ describe("Mend WebMCP tools", () => {
     expect(MEND_TOOL_METADATA.apply_approved_fix.annotations.readOnlyHint).toBe(
       false,
     );
+    expect(MEND_TOOL_METADATA.verify_fix.annotations.readOnlyHint).toBe(false);
   });
 
   it("returns a compact scan result and synchronizes the UI callback", async () => {
@@ -319,6 +320,80 @@ describe("Mend WebMCP tools", () => {
     expect(onApply).toHaveBeenCalledWith(fix, branch);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/fixes/apply",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("verifies an applied fix and synchronizes the result with the UI", async () => {
+    const fix = {
+      id: "fix_demo_issue_img_alt_verify",
+      fixId: "fix_demo_issue_img_alt_verify",
+      repositoryId: "repo_demo_001",
+      issueIds: ["issue_img_alt"],
+      status: "verified",
+      approvalStatus: "approved",
+      explanation: "A bounded demo patch.",
+      expectedImpact: ["Improves accessible naming."],
+      constraints: [],
+      files: [],
+      requiresHumanApproval: true,
+    };
+    const verification = {
+      id: "verification_" + fix.id,
+      fixId: fix.id,
+      repositoryId: "repo_demo_001",
+      branchName: "mend/fix/" + fix.id,
+      mode: "controlled_snapshot",
+      previewUrl: "https://preview.example.com/mend/",
+      verified: true,
+      verifiedAt: "2026-08-26T08:10:00.000Z",
+      beforeAuditId: "audit_before_verify",
+      afterAuditId: "audit_after_verify",
+      before: { scores: { accessibility: 74 }, brokenLinks: 3, issueCount: 6 },
+      after: { scores: { accessibility: 83 }, brokenLinks: 3, issueCount: 5 },
+      scoreDelta: { accessibility: 9 },
+      brokenLinksDelta: 0,
+      resolvedIssueIds: ["issue_img_alt"],
+      remainingIssueIds: ["issue_form_label"],
+      regressions: [],
+      checks: [
+        {
+          label: "Target issues",
+          status: "passed",
+          detail: "1 of 1 targeted issue resolved.",
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        verified: true,
+        verification,
+        fix,
+        beforeAudit: { id: verification.beforeAuditId, issues: [] },
+        afterAudit: { id: verification.afterAuditId, issues: [] },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const onVerify = vi.fn();
+    const tools = createMendTools({ onAudit: vi.fn(), onVerify });
+    const verifyTool = tools.find((tool) => tool.name === "verify_fix");
+
+    const result = await verifyTool?.execute(
+      { fixId: fix.id, previewUrl: verification.previewUrl },
+      toolContext,
+    );
+
+    expect(result).toMatchObject({
+      verified: true,
+      fixId: fix.id,
+      beforeAuditId: verification.beforeAuditId,
+      afterAuditId: verification.afterAuditId,
+      scoreDelta: { accessibility: 9 },
+      resolvedIssueIds: ["issue_img_alt"],
+    });
+    expect(onVerify).toHaveBeenCalledWith(verification);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/verify",
       expect.objectContaining({ method: "POST" }),
     );
   });

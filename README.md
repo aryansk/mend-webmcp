@@ -5,11 +5,11 @@ a shared human and agent workflow: scan, understand, propose, approve, fix, and
 verify.
 
 The project is being built for the OpenAI WebMCP Challenge. The current
-checkpoint is Phase 6: a polished, responsive UI backed by a bounded server-side
-audit pipeline, twelve feature-detected WebMCP tools, a connected controlled
-repository source viewer, and a branch-first approved-fix flow. The controlled
-demo records an isolated branch snapshot while keeping its checked-in main
-fixture unchanged.
+checkpoint is Phase 7: a polished, responsive UI backed by a bounded server-side
+audit pipeline, thirteen feature-detected WebMCP tools, a connected controlled
+repository source viewer, a branch-first approved-fix flow, and deterministic
+before/after verification. The controlled demo records an isolated branch
+snapshot while keeping its checked-in main fixture unchanged.
 
 ## Live demo
 
@@ -26,10 +26,30 @@ WebMCP adds a structured agent control plane to the same human UI. An agent can
 call compact tools to scan a site, retrieve a summary, filter issues, inspect
 evidence, compare audits, read mapped source context, generate an exact diff,
 and request human approval. After approval, the agent can create an isolated
-branch snapshot without editing main. Tool-triggered scans, fix proposals, and
-branch records update the visible dashboard immediately, so the agent and human
-operate on the same state. The human still approves every source-changing
-action.
+branch snapshot without editing main, then replay verification against that
+snapshot. Tool-triggered scans, fix proposals, branch records, and verification
+results update the visible dashboard immediately, so the agent and human operate
+on the same state. The human still approves every source-changing action.
+
+## Architecture
+
+```text
+Human UI and active agent
+          |
+          v
+document.modelContext  -->  WebMCP tool callbacks  -->  Next.js APIs
+          |                                           |
+          v                                           v
+Dashboard state  <-----  audit / fix / verify stores  demo repository
+                                      |
+                                      v
+                         branch snapshot and audit comparison
+```
+
+The browser and agent use the same route handlers and bounded domain models.
+The controlled repository stays server-side, while the dashboard receives only
+the source context, diff, branch metadata, and verification result needed for
+human review.
 
 ## Current UI
 
@@ -49,6 +69,8 @@ action.
   mutating a repository.
 - Branch-first apply action that verifies approval, validates the original
   source context, and records a demo branch and commit without changing main.
+- Before/after verification panel with score deltas, resolved and remaining
+  issues, regression checks, and saved audit IDs for comparison.
 - Imperative WebMCP registration through `document.modelContext` with feature
   detection, abortable component lifecycle cleanup, and a visible registered
   tool status panel.
@@ -75,8 +97,9 @@ Open http://localhost:3000, choose Try the deterministic demo workspace, and
 select Scan site. On the dashboard, choose Connect demo repo, select an issue,
 and choose Inspect source to open the checked-in source context. Choose Propose
 safe fix, review the exact diff, approve it, and choose Apply approved patch to
-create the isolated demo branch record. You can also enter a public HTTPS URL
-to run the real server-side audit pipeline.
+create the isolated demo branch record. Then choose Verify branch snapshot to
+show the deterministic before/after result. You can also enter a public HTTPS
+URL to run the real server-side audit pipeline.
 
 Validation commands:
 
@@ -104,6 +127,8 @@ Validation commands:
       approval/route.ts          Human approval request API
       decision/route.ts          Explicit approve/reject API
       apply/route.ts             Branch-first approved-fix API
+    app/api/verify/
+      route.ts                 Controlled branch verification API
     components/
       dashboard-page.tsx       Interactive audit workspace
       icons.tsx                Small inline SVG icon set
@@ -132,6 +157,8 @@ Validation commands:
         service.ts             Proposal and approval state helpers
         store.ts               Lightweight in-memory fix store
         errors.ts              Fix validation errors
+      verification/
+        service.ts              Before/after branch replay and result store
       repository/
         demo.ts                Controlled repository definition
         files.ts               Bounded server-side file access
@@ -148,6 +175,7 @@ Validation commands:
       url-safety.test.ts       Private-target and URL validation coverage
     tests/integration/
       audits-route.test.ts     API and category-filter coverage
+      verify-route.test.ts     Apply-to-verify audit chain coverage
 
 ## WebMCP tool surface
 
@@ -168,12 +196,15 @@ so stale tools are removed when the component unmounts.
 - get_fix_diff
 - request_fix_approval
 - apply_approved_fix
+- verify_fix
 
-`scan_site`, `propose_fix`, `request_fix_approval`, and `apply_approved_fix`
-update Mend workspace state, so they are explicitly annotated as non-read-only.
-`apply_approved_fix` verifies both approval status and source context before
-creating a controlled-demo branch snapshot; it never edits main. The remaining
-tools are read-only and return bounded JSON designed for agent reasoning. The
+`scan_site`, `propose_fix`, `request_fix_approval`, `apply_approved_fix`, and
+`verify_fix` update Mend workspace state, so they are explicitly annotated as
+non-read-only. `apply_approved_fix` verifies both approval status and source
+context before creating a controlled-demo branch snapshot; it never edits main.
+`verify_fix` replays the normalized checks against that branch snapshot and
+returns saved before/after audit IDs for `compare_audits`. The remaining tools
+are read-only and return bounded JSON designed for agent reasoning. The
 repository and fix tools expose only the connected demo repository and never
 return credentials. GitHub OAuth, real remote commits, and pull requests remain
 future integration work.
@@ -181,7 +212,7 @@ future integration work.
 ## Environment
 
 The environment template is .env.example. No environment variables are
-required for the Phase 6 audit pipeline, demo repository, or WebMCP tools.
+required for the Phase 7 audit pipeline, demo repository, or WebMCP tools.
 Future GitHub OAuth phases may use the following values:
 
 - NEXT_PUBLIC_APP_URL
@@ -203,11 +234,12 @@ uses request timeouts. The repository connector permits only known demo files,
 validates relative paths, bounds source reads, keeps all repository access on
 the server, and returns no tokens to the browser. Future remote source writes
 will require explicit human approval and preserve a reversible branch-based
-change path.
+change path. Phase 7 verification is a deterministic replay of the normalized
+demo checks; it does not claim that an external preview was deployed.
 
-The Phase 6 server stores for audits, repositories, proposed fixes, and demo
-branch snapshots are intentionally in-memory and suitable for the controlled
-demo only. After
+The Phase 7 server stores for audits, repositories, proposed fixes, verification
+results, and demo branch snapshots are intentionally in-memory and suitable for
+the controlled demo only. After
 `scan_site` and `propose_fix`, the browser keeps bounded same-page caches so the
 agent can continue from the exact state visible to the human across serverless
 requests. A full reload loses stored audit, fix, and branch history; the
@@ -228,7 +260,7 @@ Then:
 2. Open `http://localhost:3000/dashboard?site=https://demo.mend.local` in the
    WebMCP-enabled browser.
 3. Confirm the dashboard status card changes from Checking to Ready and lists
-   the twelve registered tool names.
+   the thirteen registered tool names.
 4. Ask the connected agent to call `scan_site` for `https://demo.mend.local`.
 5. Use the returned `auditId` with `get_audit_summary` and `list_issues`.
 6. Pass an issue ID from `list_issues` to `inspect_issue`.
@@ -245,11 +277,25 @@ Then:
 12. After approval, click Apply approved patch or ask the agent to call
     `apply_approved_fix`. Confirm Mend shows a `mend/fix/...` branch, a commit
     record, and that main source still contains the original issue.
-13. Run a second scan and pass both IDs to `compare_audits`.
+13. Click Verify branch snapshot or ask the agent to call `verify_fix`. Confirm
+    the before/after panel shows the targeted issue resolved, score deltas, and
+    zero regressions.
+14. Pass the saved audit IDs to `compare_audits` and confirm the same result.
 
 Browsers without WebMCP still support manual scanning and issue inspection; the
 status card reports that the agent control plane is unavailable. Final judging
 validation will use the deployed HTTPS URL, not only localhost.
+
+## Known limitations
+
+- Source patch generation and branch snapshots are limited to the checked-in
+  controlled demo repository.
+- Audit, fix, branch, and verification stores are intentionally in-memory for
+  the challenge demo.
+- Verification replays normalized checks against the approved branch snapshot;
+  it does not deploy or fetch a real preview environment.
+- GitHub OAuth, remote commits, pull requests, and durable persistence are not
+  enabled yet.
 
 ## License
 

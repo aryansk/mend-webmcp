@@ -29,3 +29,7 @@ export function getAuditForIssue(issueId: string) {
     audit.issues.some((issue) => issue.id === issueId),
   );
 }
+
+export function clearAuditStore() {
+  audits.clear();
+}

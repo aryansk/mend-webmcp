@@ -28,7 +28,7 @@ export async function applyApprovedFix(fixId: string) {
     const appliedFix = fix
       ? saveProposedFix({
           ...fix,
-          status: "applied",
+          status: fix.status === "verified" ? "verified" : "applied",
           approvalStatus: "approved",
           applied: toPublicBranch(existingBranch),
           appliedAt: fix.appliedAt ?? existingBranch.createdAt,

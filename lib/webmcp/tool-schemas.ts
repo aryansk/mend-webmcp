@@ -14,6 +14,7 @@ export const MEND_TOOL_NAMES = [
   "get_fix_diff",
   "request_fix_approval",
   "apply_approved_fix",
+  "verify_fix",
 ] as const;
 
 export type MendToolName = (typeof MEND_TOOL_NAMES)[number];
@@ -342,6 +343,31 @@ export const MEND_TOOL_METADATA: Record<MendToolName, MendToolMetadata> = {
         fixId: {
           type: "string",
           description: "The approved proposal identifier to apply.",
+        },
+      },
+      required: ["fixId"],
+      additionalProperties: false,
+    },
+    annotations: {
+      readOnlyHint: false,
+      untrustedContentHint: true,
+    },
+  },
+  verify_fix: {
+    name: "verify_fix",
+    title: "Verify an applied fix",
+    description:
+      "Re-run Mend's controlled verification checks against an applied demo branch snapshot and report resolved issues, remaining findings, score changes, and regressions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fixId: {
+          type: "string",
+          description: "The applied proposal identifier to verify.",
+        },
+        previewUrl: {
+          type: "string",
+          description: "Optional preview URL to associate with the verification result.",
         },
       },
       required: ["fixId"],
