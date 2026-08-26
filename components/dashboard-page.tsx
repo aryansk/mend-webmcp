@@ -262,6 +262,55 @@ export function DashboardPage({
 
   const handleWebMcpStatus = useCallback((status: WebMcpStatus) => {
     setWebmcpStatus(status);
+    setActivity((current) =>
+      current.map((event) => {
+        if (event.id !== "activity-2") {
+          return event;
+        }
+
+        if (status.state === "ready") {
+          return {
+            ...event,
+            label: "WebMCP ready",
+            detail:
+              status.registeredTools.length +
+              " structured tools are available to the active agent.",
+            tone: "success",
+            time: "just now",
+          };
+        }
+
+        if (status.state === "unsupported") {
+          return {
+            ...event,
+            label: "WebMCP unavailable",
+            detail:
+              status.message ??
+              "This browser does not expose document.modelContext.",
+            tone: "warning",
+            time: "blocked",
+          };
+        }
+
+        if (status.state === "error") {
+          return {
+            ...event,
+            label: "WebMCP registration failed",
+            detail: status.message ?? "Mend could not register its WebMCP tools.",
+            tone: "warning",
+            time: "needs review",
+          };
+        }
+
+        return {
+          ...event,
+          label: "WebMCP layer checking",
+          detail: "The active browser is being checked for document.modelContext.",
+          tone: "neutral",
+          time: "now",
+        };
+      }),
+    );
   }, []);
 
   const selectedIssue = useMemo(
