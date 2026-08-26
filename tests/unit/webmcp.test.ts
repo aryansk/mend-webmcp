@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { demoAudit } from "../../lib/demo-data";
 import {
   clearAuditCache,
+  cacheRepositorySnapshot,
+  clearRepositoryCache,
   createMendTools,
 } from "../../lib/webmcp/tools";
 import {
@@ -9,6 +11,8 @@ import {
   MEND_TOOL_NAMES,
 } from "../../lib/webmcp/tool-schemas";
 import { registerMendTools } from "../../lib/webmcp/register-tools";
+import { createDemoRepository } from "../../lib/repository/demo";
+import { listDemoRepositoryFiles } from "../../lib/repository/files";
 
 const toolContext = {
   signal: new AbortController().signal,
@@ -16,19 +20,22 @@ const toolContext = {
 
 afterEach(() => {
   clearAuditCache();
+  clearRepositoryCache();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe("Mend WebMCP tools", () => {
-  it("exposes five coherent schemas with explicit read-only hints", () => {
+  it("exposes coherent schemas with explicit read-only hints", () => {
     expect(Object.keys(MEND_TOOL_METADATA)).toEqual([...MEND_TOOL_NAMES]);
     expect(MEND_TOOL_METADATA.scan_site.annotations.readOnlyHint).toBe(false);
 
     for (const toolName of MEND_TOOL_NAMES) {
       const metadata = MEND_TOOL_METADATA[toolName];
       expect(metadata.inputSchema.type).toBe("object");
-      expect(metadata.inputSchema.required?.length).toBeGreaterThan(0);
+      if (toolName !== "get_repository_status") {
+        expect(metadata.inputSchema.required?.length).toBeGreaterThan(0);
+      }
       expect(metadata.description.length).toBeGreaterThan(40);
     }
 
@@ -38,6 +45,13 @@ describe("Mend WebMCP tools", () => {
     expect(MEND_TOOL_METADATA.list_issues.annotations.readOnlyHint).toBe(true);
     expect(MEND_TOOL_METADATA.inspect_issue.annotations.readOnlyHint).toBe(true);
     expect(MEND_TOOL_METADATA.compare_audits.annotations.readOnlyHint).toBe(true);
+    expect(MEND_TOOL_METADATA.get_repository_status.annotations.readOnlyHint).toBe(
+      true,
+    );
+    expect(MEND_TOOL_METADATA.list_repository_files.annotations.readOnlyHint).toBe(
+      true,
+    );
+    expect(MEND_TOOL_METADATA.inspect_source.annotations.readOnlyHint).toBe(true);
   });
 
   it("returns a compact scan result and synchronizes the UI callback", async () => {
@@ -151,6 +165,35 @@ describe("Mend WebMCP tools", () => {
     expect(comparison).toMatchObject({ scoreDelta: { performance: 30 } });
   });
 
+  it("exposes connected source status and file metadata to the agent", async () => {
+    const repository = createDemoRepository();
+    const files = await listDemoRepositoryFiles();
+    cacheRepositorySnapshot({ repository, files });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const tools = createMendTools({ onAudit: vi.fn() });
+    const statusTool = tools.find((tool) => tool.name === "get_repository_status");
+    const filesTool = tools.find((tool) => tool.name === "list_repository_files");
+
+    const status = await statusTool?.execute({}, toolContext);
+    const listed = await filesTool?.execute(
+      { repositoryId: repository.id, limit: 2 },
+      toolContext,
+    );
+
+    expect(status).toMatchObject({
+      connected: true,
+      repository: { id: repository.id, fullName: "mend/demo-site" },
+      fileCount: 5,
+    });
+    expect(listed).toMatchObject({
+      repositoryId: repository.id,
+      total: 5,
+      returned: 2,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("registers every tool and aborts the registration signal on cleanup", async () => {
     const registerTool = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("document", {
@@ -171,7 +214,7 @@ describe("Mend WebMCP tools", () => {
         }),
       );
     });
-    expect(registerTool).toHaveBeenCalledTimes(5);
+    expect(registerTool).toHaveBeenCalledTimes(MEND_TOOL_NAMES.length);
     expect(registerTool.mock.calls[0][1].signal.aborted).toBe(false);
 
     cleanup();

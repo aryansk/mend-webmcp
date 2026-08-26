@@ -7,6 +7,9 @@ export const MEND_TOOL_NAMES = [
   "list_issues",
   "inspect_issue",
   "compare_audits",
+  "get_repository_status",
+  "list_repository_files",
+  "inspect_source",
 ] as const;
 
 export type MendToolName = (typeof MEND_TOOL_NAMES)[number];
@@ -168,6 +171,79 @@ export const MEND_TOOL_METADATA: Record<MendToolName, MendToolMetadata> = {
         },
       },
       required: ["beforeAuditId", "afterAuditId"],
+      additionalProperties: false,
+    },
+    annotations: {
+      readOnlyHint: true,
+      untrustedContentHint: true,
+    },
+  },
+  get_repository_status: {
+    name: "get_repository_status",
+    title: "Get connected repository status",
+    description:
+      "Check whether Mend has a connected source repository and return its public identity, branch, and file count before asking for source context.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repositoryId: {
+          type: "string",
+          description: "Optional repository identifier if one is already known.",
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: {
+      readOnlyHint: true,
+      untrustedContentHint: true,
+    },
+  },
+  list_repository_files: {
+    name: "list_repository_files",
+    title: "List connected source files",
+    description:
+      "List bounded source-file metadata from the connected repository when locating the file related to an audit issue.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repositoryId: {
+          type: "string",
+          description: "The connected repository identifier.",
+        },
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: 50,
+          default: 20,
+          description: "Maximum number of file entries to return.",
+        },
+      },
+      required: ["repositoryId"],
+      additionalProperties: false,
+    },
+    annotations: {
+      readOnlyHint: true,
+      untrustedContentHint: true,
+    },
+  },
+  inspect_source: {
+    name: "inspect_source",
+    title: "Inspect mapped source",
+    description:
+      "Read the bounded source context mapped to one audit issue after a repository is connected; use this before proposing a patch.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repositoryId: {
+          type: "string",
+          description: "The connected repository identifier.",
+        },
+        issueId: {
+          type: "string",
+          description: "The audit issue whose mapped source should be read.",
+        },
+      },
+      required: ["repositoryId", "issueId"],
       additionalProperties: false,
     },
     annotations: {

@@ -1,6 +1,11 @@
 import type { Audit, AuditCategory, Issue, Severity } from "../types";
 import { compareAudits } from "../audit/compare";
 import { asRecord, isAbortError, requestMendApi } from "./api";
+import type {
+  RepositoryConnection,
+  RepositoryFile,
+  RepositorySourceView,
+} from "../repository/types";
 import {
   MEND_TOOL_METADATA,
   type MendToolName,
@@ -17,6 +22,10 @@ const auditCategories: AuditCategory[] = [
 const issueSeverities: Severity[] = ["critical", "high", "medium", "low"];
 const MAX_CACHED_AUDITS = 12;
 const auditCache = new Map<string, Audit>();
+let repositoryCache: {
+  repository: RepositoryConnection;
+  files: RepositoryFile[];
+} | null = null;
 
 export type MendToolCallbacks = {
   onAudit: (audit: Audit) => void;
@@ -130,6 +139,109 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
           return compareAudits(beforeAudit, afterAudit);
         }),
     },
+    {
+      ...MEND_TOOL_METADATA.get_repository_status,
+      execute: (input, context) =>
+        safelyExecute(context, async () => {
+          const values = readRecord(input);
+          const requestedRepositoryId = readOptionalString(
+            values.repositoryId,
+            "repositoryId",
+          );
+          const cached = getCachedRepository(requestedRepositoryId);
+
+          if (cached) {
+            return getCompactRepositoryStatus(cached);
+          }
+
+          if (requestedRepositoryId) {
+            const snapshot = await fetchRepositorySnapshot(
+              requestedRepositoryId,
+              context.signal,
+            );
+
+            return getCompactRepositoryStatus(snapshot);
+          }
+
+          const payload = asRecord(
+            await requestMendApi("/api/repositories", {
+              signal: context.signal,
+            }),
+          );
+          const repositories = Array.isArray(payload.repositories)
+            ? payload.repositories
+            : [];
+
+          if (repositories.length === 0) {
+            return {
+              connected: false,
+              message: "Connect a repository in the Mend UI first.",
+            };
+          }
+
+          const repository = readRepository(repositories[0]);
+          const snapshot = await fetchRepositorySnapshot(
+            repository.id,
+            context.signal,
+          );
+
+          return getCompactRepositoryStatus(snapshot);
+        }),
+    },
+    {
+      ...MEND_TOOL_METADATA.list_repository_files,
+      execute: (input, context) =>
+        safelyExecute(context, async () => {
+          const values = readRecord(input);
+          const repositoryId = readRequiredString(values, "repositoryId");
+          const limit = readLimit(values.limit);
+          const snapshot =
+            getCachedRepository(repositoryId) ??
+            (await fetchRepositorySnapshot(repositoryId, context.signal));
+          const files = snapshot.files.slice(0, limit);
+
+          return {
+            repositoryId: snapshot.repository.id,
+            total: snapshot.files.length,
+            returned: files.length,
+            files,
+          };
+        }),
+    },
+    {
+      ...MEND_TOOL_METADATA.inspect_source,
+      execute: (input, context) =>
+        safelyExecute(context, async () => {
+          const values = readRecord(input);
+          const repositoryId = readRequiredString(values, "repositoryId");
+          const issueId = readRequiredString(values, "issueId");
+          const query =
+            "/api/repositories/source?repositoryId=" +
+            encodeURIComponent(repositoryId) +
+            "&issueId=" +
+            encodeURIComponent(issueId);
+          const payload = asRecord(
+            await requestMendApi(query, { signal: context.signal }),
+          );
+          const source = readSource(payload.source);
+          const lines = source.content.split("\n");
+          const contextStart = Math.max(1, source.lineStart - 3);
+          const contextEnd = Math.min(lines.length, source.lineEnd + 3);
+
+          return {
+            repositoryId,
+            issueId,
+            filePath: source.filePath,
+            lineStart: source.lineStart,
+            lineEnd: source.lineEnd,
+            contextStart,
+            contextEnd,
+            confidence: source.confidence,
+            reason: source.reason,
+            content: lines.slice(contextStart - 1, contextEnd).join("\n"),
+          };
+        }),
+    },
   ];
 }
 
@@ -139,6 +251,20 @@ export function getToolNames(tools: WebMcpTool[]) {
 
 export function clearAuditCache() {
   auditCache.clear();
+}
+
+export function cacheRepositorySnapshot(snapshot: {
+  repository: RepositoryConnection;
+  files: RepositoryFile[];
+}) {
+  repositoryCache = {
+    repository: snapshot.repository,
+    files: snapshot.files.slice(0, 50),
+  };
+}
+
+export function clearRepositoryCache() {
+  repositoryCache = null;
 }
 
 function safelyExecute(
@@ -180,6 +306,18 @@ function readRequiredString(values: Record<string, unknown>, key: string) {
 
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(key + " is required.");
+  }
+
+  return value.trim();
+}
+
+function readOptionalString(value: unknown, key: string) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(key + " must be a non-empty string when provided.");
   }
 
   return value.trim();
@@ -329,4 +467,75 @@ function countHighImpactIssues(audit: Audit) {
   return audit.issues.filter(
     (issue) => issue.severity === "critical" || issue.severity === "high",
   ).length;
+}
+
+function getCachedRepository(repositoryId?: string) {
+  if (!repositoryCache) {
+    return undefined;
+  }
+
+  if (repositoryId && repositoryCache.repository.id !== repositoryId) {
+    return undefined;
+  }
+
+  return repositoryCache;
+}
+
+async function fetchRepositorySnapshot(
+  repositoryId: string,
+  signal: AbortSignal,
+) {
+  const payload = asRecord(
+    await requestMendApi(
+      "/api/repositories/files?repositoryId=" +
+        encodeURIComponent(repositoryId),
+      { signal },
+    ),
+  );
+  const repository = readRepository(payload.repository);
+  const files = readRepositoryFiles(payload.files);
+  const snapshot = { repository, files };
+
+  cacheRepositorySnapshot(snapshot);
+  return snapshot;
+}
+
+function readRepository(value: unknown): RepositoryConnection {
+  if (!value || typeof value !== "object") {
+    throw new Error("The repository service returned no repository.");
+  }
+
+  return value as RepositoryConnection;
+}
+
+function readRepositoryFiles(value: unknown): RepositoryFile[] {
+  if (!Array.isArray(value)) {
+    throw new Error("The repository service returned no file list.");
+  }
+
+  return value as RepositoryFile[];
+}
+
+function readSource(value: unknown): RepositorySourceView {
+  if (!value || typeof value !== "object") {
+    throw new Error("The repository service returned no source context.");
+  }
+
+  return value as RepositorySourceView;
+}
+
+function getCompactRepositoryStatus(snapshot: {
+  repository: RepositoryConnection;
+  files: RepositoryFile[];
+}) {
+  return {
+    connected: true,
+    repository: {
+      id: snapshot.repository.id,
+      fullName: snapshot.repository.fullName,
+      branch: snapshot.repository.branch,
+      visibility: snapshot.repository.visibility,
+    },
+    fileCount: snapshot.files.length,
+  };
 }

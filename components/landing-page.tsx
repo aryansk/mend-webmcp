@@ -94,7 +94,9 @@ export function LandingPage() {
           <button
             className="header-link-button"
             type="button"
-            onClick={() => setNotice("GitHub connection is part of Phase 4.")}
+            onClick={() =>
+              setNotice("Open the dashboard to connect the controlled demo repository.")
+            }
           >
             Connect GitHub
             <ArrowUpRight width={14} height={14} />
@@ -288,7 +290,7 @@ export function LandingPage() {
         <span>© 2026 Mend. Built for the WebMCP Challenge.</span>
         <span className="footer-status">
           <span className="state-dot" />
-          Phase 3 · WebMCP tools
+          Phase 4 · Source integration
         </span>
       </footer>
     </main>

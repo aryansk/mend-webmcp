@@ -8,6 +8,7 @@ export default defineConfig([
     "out/**",
     "build/**",
     "coverage/**",
+    "demo-repo/**",
     "next-env.d.ts",
   ]),
 ]);

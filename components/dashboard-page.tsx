@@ -23,7 +23,14 @@ import {
 } from "./icons";
 import { getAuditSummary } from "../lib/audit/summary";
 import type { WebMcpStatus } from "../lib/webmcp/register-tools";
+import { cacheRepositorySnapshot } from "../lib/webmcp/tools";
+import type {
+  RepositoryConnection,
+  RepositoryFile,
+  RepositorySourceView,
+} from "../lib/repository/types";
 import { WebMcpBridge } from "./webmcp-bridge";
+import { SourceViewer } from "./source-viewer";
 import type {
   ActivityEvent,
   Audit,
@@ -118,6 +125,13 @@ export function DashboardPage({
   const [notice, setNotice] = useState("");
   const [scanError, setScanError] = useState(initialError ?? "");
   const [activity, setActivity] = useState(initialActivity);
+  const [repository, setRepository] = useState<RepositoryConnection | null>(null);
+  const [sourceView, setSourceView] = useState<{
+    repository: RepositoryConnection;
+    source: RepositorySourceView;
+  } | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [sourceError, setSourceError] = useState("");
   const [webmcpStatus, setWebmcpStatus] = useState<WebMcpStatus>({
     state: "checking",
     registeredTools: [],
@@ -129,6 +143,7 @@ export function DashboardPage({
       setSiteUrl(nextAudit.siteUrl);
       setSelectedIssueId(nextAudit.issues[0]?.id ?? "");
       setScanError("");
+      setSourceView(null);
       setActivity((current) => [
         {
           id: "activity-" + Date.now(),
@@ -213,6 +228,118 @@ export function DashboardPage({
     }
   }
 
+  async function handleConnectRepository() {
+    if (repository) {
+      setNotice(
+        repository.fullName + " is already connected on " + repository.branch + ".",
+      );
+      return;
+    }
+
+    setIsConnecting(true);
+    setSourceError("");
+
+    try {
+      const response = await fetch("/api/repositories", {
+        body: JSON.stringify({ provider: "demo" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json()) as {
+        repository?: RepositoryConnection;
+        files?: RepositoryFile[];
+        error?: string;
+      };
+
+      if (!response.ok || !payload.repository || !payload.files) {
+        throw new Error(payload.error ?? "The repository could not be connected.");
+      }
+
+      const connectedRepository = payload.repository;
+      const connectedFiles = payload.files;
+
+      setRepository(connectedRepository);
+      cacheRepositorySnapshot({
+        repository: connectedRepository,
+        files: connectedFiles,
+      });
+      setActivity((current) => [
+        {
+          id: "activity-" + Date.now(),
+          label: "Demo repository connected",
+          detail:
+            connectedRepository.fullName +
+            " · " +
+            connectedRepository.fileCount +
+            " source files available.",
+          tone: "success",
+          time: "just now",
+        },
+        ...current,
+      ]);
+      setNotice(
+        "Connected " +
+          connectedRepository.fullName +
+          " on " +
+          connectedRepository.branch +
+          ".",
+      );
+    } catch (error) {
+      setSourceError(
+        error instanceof Error
+          ? error.message
+          : "The repository could not be connected.",
+      );
+    } finally {
+      setIsConnecting(false);
+    }
+  }
+
+  async function handleInspectSource() {
+    if (!selectedIssue) {
+      return;
+    }
+
+    if (!repository) {
+      setNotice("Connect the controlled demo repository before inspecting source.");
+      return;
+    }
+
+    setSourceError("");
+
+    try {
+      const query =
+        "/api/repositories/source?repositoryId=" +
+        encodeURIComponent(repository.id) +
+        "&issueId=" +
+        encodeURIComponent(selectedIssue.id);
+      const response = await fetch(query);
+      const payload = (await response.json()) as {
+        repository?: RepositoryConnection;
+        source?: RepositorySourceView;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.repository || !payload.source) {
+        throw new Error(payload.error ?? "The source mapping could not be read.");
+      }
+
+      setSourceView({
+        repository: payload.repository,
+        source: payload.source,
+      });
+      setNotice(
+        "Verified " + payload.source.filePath + " against the connected repository.",
+      );
+    } catch (error) {
+      setSourceError(
+        error instanceof Error
+          ? error.message
+          : "The source mapping could not be read.",
+      );
+    }
+  }
+
   const webmcpStatusLabel = getWebMcpStatusLabel(webmcpStatus.state);
   const webmcpStatusClass = getWebMcpStatusClass(webmcpStatus.state);
 
@@ -239,7 +366,7 @@ export function DashboardPage({
   function handleDraftApproval() {
     setDraftApproved(true);
     setNotice(
-      "Mock approval recorded. Applying source changes remains gated for the source integration phase.",
+      "Mock approval recorded. Applying source changes remains gated for the proposed-fix phase.",
     );
     setActivity((current) => [
       {
@@ -291,16 +418,23 @@ export function DashboardPage({
         <div className="sidebar-section">
           <span className="sidebar-label">Connected source</span>
           <button
-            className="repo-card"
+            className={"repo-card " + (repository ? "repo-card-connected" : "")}
             type="button"
-            onClick={() => setNotice("GitHub connection is scheduled for Phase 4.")}
+            onClick={handleConnectRepository}
+            disabled={isConnecting}
           >
             <span className="repo-card-icon">
               <GitBranch width={16} height={16} />
             </span>
             <span>
-              <strong>Repository</strong>
-              <small>Not connected</small>
+              <strong>{repository?.fullName ?? "Repository"}</strong>
+              <small>
+                {isConnecting
+                  ? "Connecting…"
+                  : repository
+                    ? repository.branch + " · " + repository.fileCount + " files"
+                    : "Demo repository available"}
+              </small>
             </span>
             <ArrowRight width={14} height={14} />
           </button>
@@ -338,7 +472,7 @@ export function DashboardPage({
             <span className="status-progress-label">
               {webmcpStatus.state === "ready"
                 ? webmcpStatus.registeredTools.length + " tools registered"
-                : "Phase 3 of 4"}
+                : "Phase 4 of 4"}
             </span>
             {webmcpStatus.registeredTools.length > 0 ? (
               <div className="webmcp-tool-list" aria-label="Registered WebMCP tools">
@@ -385,10 +519,15 @@ export function DashboardPage({
             <button
               className="secondary-button"
               type="button"
-              onClick={() => setNotice("GitHub connection is scheduled for Phase 4.")}
+              onClick={handleConnectRepository}
+              disabled={isConnecting}
             >
               <GitBranch width={15} height={15} />
-              Connect repo
+              {repository
+                ? "Source connected"
+                : isConnecting
+                  ? "Connecting…"
+                  : "Connect demo repo"}
             </button>
             <button
               className="primary-button compact"
@@ -420,6 +559,20 @@ export function DashboardPage({
               type="button"
               onClick={() => setScanError("")}
               aria-label="Dismiss audit error"
+            >
+              <X width={15} height={15} />
+            </button>
+          </div>
+        ) : null}
+
+        {sourceError ? (
+          <div className="dashboard-notice dashboard-notice-error" role="alert">
+            <AlertTriangle width={16} height={16} />
+            <span>{sourceError}</span>
+            <button
+              type="button"
+              onClick={() => setSourceError("")}
+              aria-label="Dismiss source error"
             >
               <X width={15} height={15} />
             </button>
@@ -661,10 +814,10 @@ export function DashboardPage({
                 <button
                   className="secondary-button full-width"
                   type="button"
-                  onClick={() => setNotice("A connected repository is required to inspect source live.")}
+                  onClick={handleInspectSource}
                 >
                   <ExternalLink width={15} height={15} />
-                  Inspect source
+                  {repository ? "Inspect source" : "Connect source first"}
                 </button>
                 <button className="primary-button full-width" type="button" onClick={handleProposeFix}>
                   <Sparkle width={15} height={15} />
@@ -781,9 +934,8 @@ export function DashboardPage({
               </span>
               <p>
                 This draft addresses the selected finding without changing
-                navigation or visual layout. Phase 2 records the review state
-                only; repository writes arrive after the source integration
-                phase.
+                navigation or visual layout. Phase 4 keeps the connected source
+                read-only; repository writes arrive after the approval phase.
               </p>
             </div>
             <div className="patch-modal-footer">
@@ -802,6 +954,14 @@ export function DashboardPage({
             </div>
           </section>
         </div>
+      ) : null}
+
+      {sourceView ? (
+        <SourceViewer
+          repository={sourceView.repository}
+          source={sourceView.source}
+          onClose={() => setSourceView(null)}
+        />
       ) : null}
     </main>
   );
