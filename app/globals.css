@@ -6229,4 +6229,556 @@ input:focus-visible {
     border-bottom: 0;
   }
 }
+
+/* Readability pass: keep the Deal No Mercy character while giving product
+   copy, findings, and review surfaces more room to breathe. */
+
+:root {
+  --muted-dim: #6d656a;
+  --green-dark: #287b55;
+}
+
+body {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+.micro-label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+
+.brand-kicker {
+  font-size: 9px;
+}
+
+.header-nav > a,
+.header-link-button {
+  font-size: 11px;
+}
+
+.primary-button,
+.secondary-button,
+.reject-button {
+  font-size: 11px;
+  letter-spacing: 0.035em;
+}
+
+.primary-button.compact {
+  font-size: 11px;
+  min-height: 42px;
+}
+
+.hero-description {
+  font-size: 17px;
+  line-height: 1.7;
+  max-width: 530px;
+}
+
+.input-prefix {
+  font-size: 13px;
+}
+
+.url-input-wrap input {
+  font-size: 15px;
+}
+
+.form-message,
+.demo-link {
+  font-size: 11px;
+}
+
+.proof-item strong {
+  font-size: 11px;
+}
+
+.proof-item small {
+  font-size: 11px;
+}
+
+.window-label,
+.window-state {
+  font-size: 11px;
+}
+
+.workflow-step-copy strong {
+  font-family: var(--font-geist-sans);
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+.workflow-step-copy small {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.workflow-status {
+  font-size: 10px;
+}
+
+.preview-diff-head {
+  font-size: 11px;
+}
+
+.code-line {
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.diff-footer {
+  font-size: 10px;
+}
+
+.principle-card h3 {
+  font-size: 23px;
+}
+
+.principle-card p {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.dashboard-sidebar {
+  font-size: 13px;
+}
+
+.sidebar-label {
+  font-size: 10px;
+  letter-spacing: 0.13em;
+}
+
+.sidebar-link {
+  font-size: 12px;
+  min-height: 42px;
+}
+
+.repo-card strong {
+  font-size: 11px;
+}
+
+.repo-card small {
+  font-size: 10px;
+}
+
+.webmcp-status-card > strong {
+  font-size: 12px;
+}
+
+.webmcp-status-card > p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.status-progress-label {
+  font-size: 10px;
+}
+
+.webmcp-tool-chip {
+  font-size: 9px;
+}
+
+.breadcrumb {
+  font-size: 11px;
+}
+
+.dashboard-subtitle {
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 52ch;
+}
+
+.dashboard-notice {
+  font-size: 12px;
+  line-height: 1.45;
+  min-height: 44px;
+  padding-bottom: 8px;
+  padding-top: 8px;
+}
+
+.panel-header {
+  min-height: 86px;
+}
+
+.panel-header h2 {
+  font-family: var(--font-geist-sans);
+  font-size: 19px;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-transform: none;
+}
+
+.score-card {
+  min-height: 168px;
+  padding: 18px;
+}
+
+.score-card-heading strong {
+  font-family: var(--font-geist-sans);
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+.score-card-heading small {
+  font-size: 11px;
+}
+
+.score-card-value-row {
+  margin-top: 21px;
+}
+
+.score-ring {
+  height: 60px;
+  width: 60px;
+}
+
+.score-ring span {
+  font-size: 22px;
+}
+
+.trend-neutral {
+  font-size: 11px;
+}
+
+.score-card-trend small,
+.score-card-footnote {
+  font-size: 11px;
+}
+
+.broken-link-value {
+  margin-top: 22px;
+}
+
+.broken-link-value strong {
+  font-size: 34px;
+}
+
+.broken-link-value span {
+  font-size: 11px;
+}
+
+.verification-header {
+  min-height: 100px;
+  padding-bottom: 19px;
+  padding-top: 19px;
+}
+
+.verification-header p {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.verification-badge {
+  font-size: 10px;
+}
+
+.verification-metric {
+  min-height: 110px;
+  padding: 18px;
+}
+
+.verification-metric > span {
+  font-size: 10px;
+}
+
+.verification-metric strong {
+  font-size: 27px;
+}
+
+.verification-metric em {
+  font-size: 11px;
+}
+
+.verification-check strong {
+  font-family: var(--font-geist-sans);
+  font-size: 12px;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+.verification-check small,
+.verification-summary-copy small {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.verification-summary-copy code {
+  font-size: 10px;
+}
+
+.filter-button,
+.text-button {
+  font-size: 11px;
+}
+
+.issue-row {
+  min-height: 72px;
+  padding-bottom: 10px;
+  padding-top: 10px;
+}
+
+.issue-row-title {
+  color: var(--ink-native);
+  font-family: var(--font-geist-sans);
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  overflow: visible;
+  text-overflow: clip;
+  text-transform: none;
+  white-space: normal;
+}
+
+.issue-row-meta {
+  font-size: 11px;
+  line-height: 1.35;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.severity-badge {
+  font-size: 10px;
+  padding: 6px 8px;
+}
+
+.panel-footer {
+  font-size: 11px;
+}
+
+.detail-content {
+  padding-bottom: 23px;
+  padding-top: 24px;
+}
+
+.detail-title-row h3 {
+  font-family: var(--font-geist-sans);
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  text-transform: none;
+}
+
+.detail-description {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.detail-label {
+  font-size: 11px;
+  letter-spacing: 0.07em;
+}
+
+.evidence-block {
+  font-size: 12px;
+  line-height: 1.65;
+  padding: 12px;
+}
+
+.source-hint strong {
+  font-size: 11px;
+}
+
+.source-hint span {
+  font-size: 11px;
+}
+
+.confidence-badge {
+  font-size: 10px !important;
+}
+
+.impact-callout strong {
+  font-size: 11px;
+}
+
+.impact-callout small {
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.approval-note {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.activity-live {
+  font-size: 10px;
+}
+
+.activity-row {
+  min-height: 68px;
+}
+
+.activity-copy strong {
+  font-family: var(--font-geist-sans);
+  font-size: 12px;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+.activity-copy small {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.activity-time {
+  font-size: 10px;
+}
+
+.patch-modal-summary strong,
+.source-viewer-summary strong {
+  font-size: 12px;
+}
+
+.patch-modal-summary small,
+.source-viewer-summary small,
+.source-viewer-proof {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.diff-view-toolbar,
+.diff-file-toolbar,
+.source-code-toolbar {
+  font-size: 10px;
+}
+
+.diff-row {
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.patch-modal-explanation p {
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.patch-branch-result strong {
+  font-size: 11px;
+}
+
+.patch-branch-result small {
+  font-size: 10px;
+}
+
+.patch-branch-result code {
+  font-size: 10px;
+}
+
+.source-code-line {
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.source-viewer-footer {
+  font-size: 10px;
+}
+
+@media (max-width: 620px) {
+  .header-nav > a,
+  .header-link-button {
+    font-size: 10px;
+  }
+
+  .hero-description {
+    font-size: 16px;
+  }
+
+  .score-card {
+    min-height: 158px;
+    padding: 14px;
+  }
+
+  .score-card-heading strong {
+    font-size: 12px;
+  }
+
+  .score-card-heading small {
+    font-size: 10px;
+  }
+
+  .score-card-value-row {
+    gap: 9px;
+    margin-top: 17px;
+  }
+
+  .score-ring {
+    height: 54px;
+    width: 54px;
+  }
+
+  .score-ring span {
+    font-size: 19px;
+  }
+
+  .score-card-trend small,
+  .score-card-footnote {
+    font-size: 10px;
+  }
+
+  .broken-link-value strong {
+    font-size: 30px;
+  }
+
+  .panel-header {
+    min-height: 82px;
+  }
+
+  .panel-header h2 {
+    font-size: 17px;
+  }
+
+  .verification-metric {
+    min-height: 100px;
+    padding: 14px;
+  }
+
+  .verification-metric strong {
+    font-size: 23px;
+  }
+
+  .issue-row {
+    min-height: 76px;
+  }
+
+  .issue-row-title {
+    font-size: 12px;
+  }
+
+  .issue-row-meta {
+    font-size: 10px;
+  }
+
+  .severity-badge {
+    font-size: 9px;
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .detail-title-row h3 {
+    font-size: 21px;
+  }
+
+  .detail-description {
+    font-size: 14px;
+  }
+
+  .diff-row,
+  .source-code-line {
+    font-size: 11px;
+  }
+}
 }
