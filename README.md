@@ -5,11 +5,14 @@ a shared human and agent workflow: scan, understand, propose, approve, fix, and
 verify.
 
 The project is being built for the OpenAI WebMCP Challenge. The current
-checkpoint is Phase 7: a polished, responsive UI backed by a bounded server-side
+checkpoint is Phase 8: a polished, responsive UI backed by a bounded server-side
 audit pipeline, thirteen feature-detected WebMCP tools, a connected controlled
 repository source viewer, a branch-first approved-fix flow, and deterministic
-before/after verification. The controlled demo records an isolated branch
-snapshot while keeping its checked-in main fixture unchanged.
+before/after verification. The interface now carries Deal No Mercy's native
+iOS-inspired scrapbook language: warm paper, notebook grid lines, ink outlines,
+hard offset shadows, sticker accents, and condensed display type. The controlled
+demo records an isolated branch snapshot while keeping its checked-in main
+fixture unchanged.
 
 ## Live demo
 
@@ -80,6 +83,9 @@ human review.
   relative-path validation, source-hint verification, and a read-only source
   viewer with highlighted mapped lines.
 - Activity timeline, loading states, recoverable errors, and mobile layouts.
+- Native scrapbook visual system adapted from the Deal No Mercy iOS app, with
+  paper surfaces, grid-paper backgrounds, sticker badges, hard shadows, and
+  accessible high-contrast action states.
 
 ## Run locally
 
@@ -212,7 +218,7 @@ future integration work.
 ## Environment
 
 The environment template is .env.example. No environment variables are
-required for the Phase 7 audit pipeline, demo repository, or WebMCP tools.
+required for the Phase 8 audit pipeline, demo repository, or WebMCP tools.
 Future GitHub OAuth phases may use the following values:
 
 - NEXT_PUBLIC_APP_URL
@@ -234,10 +240,10 @@ uses request timeouts. The repository connector permits only known demo files,
 validates relative paths, bounds source reads, keeps all repository access on
 the server, and returns no tokens to the browser. Future remote source writes
 will require explicit human approval and preserve a reversible branch-based
-change path. Phase 7 verification is a deterministic replay of the normalized
+change path. Verification is a deterministic replay of the normalized
 demo checks; it does not claim that an external preview was deployed.
 
-The Phase 7 server stores for audits, repositories, proposed fixes, verification
+The Phase 8 stores for audits, repositories, proposed fixes, verification
 results, and demo branch snapshots are intentionally in-memory and suitable for
 the controlled demo only. After
 `scan_site` and `propose_fix`, the browser keeps bounded same-page caches so the

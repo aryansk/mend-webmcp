@@ -53,21 +53,21 @@ const scoreCards: Array<{
     key: "performance",
     label: "Performance",
     detail: "Page speed",
-    color: "#b9f36b",
+    color: "#75D6A2",
     icon: Gauge,
   },
   {
     key: "accessibility",
     label: "Accessibility",
     detail: "Inclusive UX",
-    color: "#a78bfa",
+    color: "#B79BEF",
     icon: ShieldCheck,
   },
   {
     key: "seo",
     label: "SEO",
     detail: "Search readiness",
-    color: "#67e8f9",
+    color: "#6CB9E8",
     icon: Search,
   },
 ];
@@ -762,7 +762,7 @@ export function DashboardPage({
             <span className="status-progress-label">
               {webmcpStatus.state === "ready"
                   ? webmcpStatus.registeredTools.length + " tools registered"
-                : "Phase 7 of 8"}
+                : "Phase 8 of 8"}
             </span>
             {webmcpStatus.registeredTools.length > 0 ? (
               <div className="webmcp-tool-list" aria-label="Registered WebMCP tools">
