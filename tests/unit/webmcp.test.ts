@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { demoAudit } from "../../lib/demo-data";
-import { createMendTools } from "../../lib/webmcp/tools";
+import {
+  clearAuditCache,
+  createMendTools,
+} from "../../lib/webmcp/tools";
 import {
   MEND_TOOL_METADATA,
   MEND_TOOL_NAMES,
@@ -12,6 +15,7 @@ const toolContext = {
 };
 
 afterEach(() => {
+  clearAuditCache();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -104,6 +108,47 @@ describe("Mend WebMCP tools", () => {
       "error",
       "severity must contain valid Mend severity values.",
     );
+  });
+
+  it("keeps a bounded same-page audit chain available across tool calls", async () => {
+    const before = { ...demoAudit, id: "audit_cache_before" };
+    const after = {
+      ...demoAudit,
+      id: "audit_cache_after",
+      scores: { performance: 91, accessibility: 98, seo: 94 },
+      brokenLinks: 0,
+      issues: demoAudit.issues.slice(1),
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ audit: before }))
+      .mockResolvedValueOnce(Response.json({ audit: after }));
+    vi.stubGlobal("fetch", fetchMock);
+    const tools = createMendTools({ onAudit: vi.fn() });
+    const scanTool = tools.find((tool) => tool.name === "scan_site");
+    const summaryTool = tools.find((tool) => tool.name === "get_audit_summary");
+    const inspectTool = tools.find((tool) => tool.name === "inspect_issue");
+    const compareTool = tools.find((tool) => tool.name === "compare_audits");
+
+    await scanTool?.execute({ url: before.siteUrl }, toolContext);
+    await scanTool?.execute({ url: after.siteUrl }, toolContext);
+    const summary = await summaryTool?.execute(
+      { auditId: before.id },
+      toolContext,
+    );
+    const inspection = await inspectTool?.execute(
+      { issueId: "issue_img_alt" },
+      toolContext,
+    );
+    const comparison = await compareTool?.execute(
+      { beforeAuditId: before.id, afterAuditId: after.id },
+      toolContext,
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(summary).toMatchObject({ auditId: before.id, issueCount: 6 });
+    expect(inspection).toHaveProperty("issue.id", "issue_img_alt");
+    expect(comparison).toMatchObject({ scoreDelta: { performance: 30 } });
   });
 
   it("registers every tool and aborts the registration signal on cleanup", async () => {

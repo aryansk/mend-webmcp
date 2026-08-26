@@ -154,10 +154,11 @@ uses request timeouts. Future source flows will keep tokens server-side,
 validate patch paths, require explicit human approval, and preserve a reversible
 branch-based change path.
 
-The Phase 3 store is intentionally in-memory and suitable for the controlled
-demo only. A tool call must reach the same running instance as the audit it
-references. Durable persistence will be added only if it improves the judging
-workflow.
+The Phase 3 server store is intentionally in-memory and suitable for the
+controlled demo only. After `scan_site`, the browser keeps the most recent 12
+audits in a bounded session cache so the same-page tool chain remains reliable
+across serverless requests. A full reload still loses non-demo audit history.
+Durable persistence will be added only if it improves the judging workflow.
 
 ## WebMCP local testing
 

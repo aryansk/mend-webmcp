@@ -1,4 +1,5 @@
 import type { Audit, AuditCategory, Issue, Severity } from "../types";
+import { compareAudits } from "../audit/compare";
 import { asRecord, isAbortError, requestMendApi } from "./api";
 import {
   MEND_TOOL_METADATA,
@@ -14,6 +15,8 @@ const auditCategories: AuditCategory[] = [
 ];
 
 const issueSeverities: Severity[] = ["critical", "high", "medium", "low"];
+const MAX_CACHED_AUDITS = 12;
+const auditCache = new Map<string, Audit>();
 
 export type MendToolCallbacks = {
   onAudit: (audit: Audit) => void;
@@ -37,6 +40,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
           );
           const audit = readAudit(payload);
 
+          cacheAudit(audit);
           callbacks.onAudit(audit);
 
           return {
@@ -44,9 +48,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
             siteUrl: audit.siteUrl,
             scores: audit.scores,
             issueCount: audit.issues.length,
-            highImpactIssueCount: audit.issues.filter(
-              (issue) => issue.severity === "critical" || issue.severity === "high",
-            ).length,
+            highImpactIssueCount: countHighImpactIssues(audit),
           };
         }),
     },
@@ -56,14 +58,9 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const auditId = readRequiredString(values, "auditId");
-          const payload = asRecord(
-            await requestMendApi(
-              "/api/audits?auditId=" + encodeURIComponent(auditId),
-              { signal: context.signal },
-            ),
-          );
+          const audit = await getAuditById(auditId, context.signal);
 
-          return readSummary(payload);
+          return getCompactSummary(audit);
         }),
     },
     {
@@ -75,13 +72,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
           const category = readCategory(values.category);
           const severities = readSeverityArray(values.severity);
           const limit = readLimit(values.limit);
-          const payload = asRecord(
-            await requestMendApi(
-              "/api/audits?auditId=" + encodeURIComponent(auditId),
-              { signal: context.signal },
-            ),
-          );
-          const audit = readAudit(payload);
+          const audit = await getAuditById(auditId, context.signal);
           const filteredIssues = audit.issues.filter((issue) => {
             if (category && issue.category !== category) {
               return false;
@@ -105,13 +96,17 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const issueId = readRequiredString(values, "issueId");
-          const payload = asRecord(
-            await requestMendApi(
-              "/api/audits?issueId=" + encodeURIComponent(issueId),
-              { signal: context.signal },
-            ),
-          );
-          const issue = readIssue(payload);
+          const cachedIssue = findCachedIssue(issueId);
+          const issue = cachedIssue
+            ? cachedIssue
+            : readIssue(
+                asRecord(
+                  await requestMendApi(
+                    "/api/audits?issueId=" + encodeURIComponent(issueId),
+                    { signal: context.signal },
+                  ),
+                ),
+              );
 
           return {
             issue,
@@ -127,20 +122,12 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
           const values = readRecord(input);
           const beforeAuditId = readRequiredString(values, "beforeAuditId");
           const afterAuditId = readRequiredString(values, "afterAuditId");
-          const query =
-            "/api/audits?beforeAuditId=" +
-            encodeURIComponent(beforeAuditId) +
-            "&afterAuditId=" +
-            encodeURIComponent(afterAuditId);
-          const payload = asRecord(
-            await requestMendApi(query, { signal: context.signal }),
-          );
+          const [beforeAudit, afterAudit] = await Promise.all([
+            getAuditById(beforeAuditId, context.signal),
+            getAuditById(afterAuditId, context.signal),
+          ]);
 
-          return payload.comparison ?? {
-            ok: false,
-            error: "The audit service returned no comparison.",
-            code: "invalid_response",
-          };
+          return compareAudits(beforeAudit, afterAudit);
         }),
     },
   ];
@@ -148,6 +135,10 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
 
 export function getToolNames(tools: WebMcpTool[]) {
   return tools.map((tool) => tool.name as MendToolName);
+}
+
+export function clearAuditCache() {
+  auditCache.clear();
 }
 
 function safelyExecute(
@@ -257,14 +248,6 @@ function readAudit(payload: Record<string, unknown>): Audit {
   return payload.audit as Audit;
 }
 
-function readSummary(payload: Record<string, unknown>) {
-  if (!payload.summary || typeof payload.summary !== "object") {
-    throw new Error("The audit service returned no summary.");
-  }
-
-  return payload.summary;
-}
-
 function readIssue(payload: Record<string, unknown>): Issue {
   if (!payload.issue || typeof payload.issue !== "object") {
     throw new Error("The audit service returned no issue.");
@@ -283,4 +266,67 @@ function toCompactIssue(issue: Issue) {
     selector: issue.selector,
     sourceHint: issue.sourceHint,
   };
+}
+
+async function getAuditById(auditId: string, signal: AbortSignal) {
+  const cached = auditCache.get(auditId);
+
+  if (cached) {
+    return cached;
+  }
+
+  const payload = asRecord(
+    await requestMendApi(
+      "/api/audits?auditId=" + encodeURIComponent(auditId),
+      { signal },
+    ),
+  );
+  const audit = readAudit(payload);
+
+  cacheAudit(audit);
+  return audit;
+}
+
+function cacheAudit(audit: Audit) {
+  auditCache.delete(audit.id);
+  auditCache.set(audit.id, audit);
+
+  while (auditCache.size > MAX_CACHED_AUDITS) {
+    const oldestAuditId = auditCache.keys().next().value;
+
+    if (!oldestAuditId) {
+      return;
+    }
+
+    auditCache.delete(oldestAuditId);
+  }
+}
+
+function findCachedIssue(issueId: string) {
+  for (const audit of auditCache.values()) {
+    const issue = audit.issues.find((candidate) => candidate.id === issueId);
+
+    if (issue) {
+      return issue;
+    }
+  }
+
+  return undefined;
+}
+
+function getCompactSummary(audit: Audit) {
+  return {
+    auditId: audit.id,
+    siteUrl: audit.siteUrl,
+    issueCount: audit.issues.length,
+    highImpactIssueCount: countHighImpactIssues(audit),
+    scores: audit.scores,
+    brokenLinks: audit.brokenLinks,
+  };
+}
+
+function countHighImpactIssues(audit: Audit) {
+  return audit.issues.filter(
+    (issue) => issue.severity === "critical" || issue.severity === "high",
+  ).length;
 }
