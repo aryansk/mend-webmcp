@@ -21,9 +21,14 @@ import {
   Sparkle,
   X,
 } from "./icons";
-import { demoAudit } from "../lib/demo-data";
 import { getAuditSummary } from "../lib/audit/summary";
-import type { ActivityEvent, AuditCategory, Issue, ScoreKey } from "../lib/types";
+import type {
+  ActivityEvent,
+  Audit,
+  AuditCategory,
+  Issue,
+  ScoreKey,
+} from "../lib/types";
 
 const scoreCards: Array<{
   key: ScoreKey;
@@ -58,8 +63,8 @@ const scoreCards: Array<{
 const initialActivity: ActivityEvent[] = [
   {
     id: "activity-1",
-    label: "Demo audit loaded",
-    detail: "6 normalized issues are ready to inspect.",
+    label: "Audit loaded",
+    detail: "Normalized findings are ready to inspect.",
     tone: "success",
     time: "just now",
   },
@@ -68,7 +73,7 @@ const initialActivity: ActivityEvent[] = [
     label: "WebMCP layer queued",
     detail: "Read-only tools arrive in Phase 3.",
     tone: "neutral",
-    time: "Phase 1",
+    time: "Phase 2",
   },
   {
     id: "activity-3",
@@ -79,40 +84,99 @@ const initialActivity: ActivityEvent[] = [
   },
 ];
 
-export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
+const EMPTY_ISSUE: Issue = {
+  id: "empty-issue",
+  auditId: "",
+  category: "accessibility",
+  severity: "low",
+  title: "No issue selected",
+  description: "Run an audit to populate the prioritized findings.",
+  pageUrl: "",
+  evidence: "No audit issue is selected.",
+  estimatedImpact: "A completed audit will show evidence and impact here.",
+};
+
+export function DashboardPage({
+  initialSiteUrl,
+  initialAudit,
+  initialError,
+}: {
+  initialSiteUrl: string;
+  initialAudit: Audit | null;
+  initialError?: string;
+}) {
   const [siteUrl] = useState(initialSiteUrl);
-  const [selectedIssueId, setSelectedIssueId] = useState(demoAudit.issues[0]?.id ?? "");
+  const [audit, setAudit] = useState<Audit | null>(initialAudit);
+  const [selectedIssueId, setSelectedIssueId] = useState(
+    initialAudit?.issues[0]?.id ?? "",
+  );
   const [isScanning, setIsScanning] = useState(false);
   const [patchVisible, setPatchVisible] = useState(false);
   const [draftApproved, setDraftApproved] = useState(false);
   const [notice, setNotice] = useState("");
+  const [scanError, setScanError] = useState(initialError ?? "");
   const [activity, setActivity] = useState(initialActivity);
 
   const selectedIssue = useMemo(
     () =>
-      demoAudit.issues.find((issue) => issue.id === selectedIssueId) ??
-      demoAudit.issues[0],
-    [selectedIssueId],
+      audit?.issues.find((issue) => issue.id === selectedIssueId) ??
+      audit?.issues[0],
+    [audit, selectedIssueId],
   );
-  const summary = getAuditSummary(demoAudit);
+  const displayIssue = selectedIssue ?? EMPTY_ISSUE;
+  const issues = audit?.issues ?? [];
+  const summary = audit
+    ? getAuditSummary(audit)
+    : { issueCount: 0, highImpactIssueCount: 0 };
+  const isDemoAudit = audit?.id === "audit_demo_001";
 
-  function handleRescan() {
+  async function handleRescan() {
     setIsScanning(true);
     setNotice("");
-    window.setTimeout(() => {
-      setIsScanning(false);
+    setScanError("");
+
+    try {
+      const response = await fetch("/api/audits", {
+        body: JSON.stringify({
+          url: siteUrl,
+          categories: ["accessibility", "performance", "seo", "link"],
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json()) as {
+        audit?: Audit;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.audit) {
+        throw new Error(payload.error ?? "The audit could not be completed.");
+      }
+
+      setAudit(payload.audit);
+      setSelectedIssueId(payload.audit.issues[0]?.id ?? "");
       setActivity((current) => [
         {
           id: "activity-" + Date.now(),
-          label: "Demo audit refreshed",
-          detail: "The same deterministic findings are available.",
+          label: "Audit refreshed",
+          detail:
+            payload.audit?.issues.length +
+            " normalized findings are ready to inspect.",
           tone: "success",
           time: "just now",
         },
         ...current,
       ]);
-      setNotice("Audit refreshed. Phase 2 will replace this demo data with live checks.");
-    }, 850);
+      setNotice("Audit refreshed from the live target.");
+    } catch (error) {
+      setScanError(
+        error instanceof Error
+          ? error.message
+          : "The audit could not be completed.",
+      );
+    } finally {
+      setIsScanning(false);
+    }
   }
 
   function handleProposeFix() {
@@ -138,7 +202,7 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
   function handleDraftApproval() {
     setDraftApproved(true);
     setNotice(
-      "Mock approval recorded. Applying source changes is intentionally unavailable in the Phase 1 shell.",
+      "Mock approval recorded. Applying source changes remains gated for the source integration phase.",
     );
     setActivity((current) => [
       {
@@ -150,10 +214,6 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
       },
       ...current,
     ]);
-  }
-
-  if (!selectedIssue) {
-    return null;
   }
 
   return (
@@ -179,7 +239,7 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
           <a className="sidebar-link" href="#issues">
             <AlertTriangle width={16} height={16} />
             Issues
-            <span className="sidebar-link-count">6</span>
+            <span className="sidebar-link-count">{issues.length}</span>
           </a>
           <a className="sidebar-link" href="#activity">
             <Clock width={16} height={16} />
@@ -215,13 +275,12 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
             </div>
             <strong>WebMCP control plane</strong>
             <p>
-              The UI shell is ready. Structured tools are added after the audit
-              pipeline.
+              The audit pipeline is live. Structured tools arrive in Phase 3.
             </p>
             <div className="status-progress">
-              <span style={{ width: "25%" }} />
+              <span style={{ width: "50%" }} />
             </div>
-            <span className="status-progress-label">Phase 1 of 4</span>
+            <span className="status-progress-label">Phase 2 of 4</span>
           </div>
           <Link className="sidebar-footer-link" href="/">
             <span className="footer-logo-dot" />
@@ -240,11 +299,18 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
             </div>
             <div className="dashboard-title-row">
               <h1>{formatSiteName(siteUrl)}</h1>
-              <span className="mock-badge">DEMO DATA</span>
+              <span className="mock-badge">
+                {isDemoAudit ? "DEMO DATA" : audit ? "LIVE AUDIT" : "NO AUDIT"}
+              </span>
             </div>
             <p className="dashboard-subtitle">
-              Last scanned just now · {summary.issueCount} issues found ·{" "}
-              {summary.highImpactIssueCount} high impact
+              {audit
+                ? "Last scanned just now · " +
+                  summary.issueCount +
+                  " issues found · " +
+                  summary.highImpactIssueCount +
+                  " high impact"
+                : "No completed audit is available for this target."}
             </p>
           </div>
           <div className="dashboard-header-actions">
@@ -278,12 +344,26 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
           </div>
         ) : null}
 
+        {scanError ? (
+          <div className="dashboard-notice dashboard-notice-error" role="alert">
+            <AlertTriangle width={16} height={16} />
+            <span>{scanError}</span>
+            <button
+              type="button"
+              onClick={() => setScanError("")}
+              aria-label="Dismiss audit error"
+            >
+              <X width={15} height={15} />
+            </button>
+          </div>
+        ) : null}
+
         <div className="score-grid">
           {scoreCards.map((card) => {
             const Icon = card.icon;
-            const score = demoAudit.scores[card.key] ?? 0;
+            const score = audit?.scores[card.key];
             const ringStyle = {
-              "--score": score,
+              "--score": score ?? 0,
               "--ring-color": card.color,
             } as CSSProperties;
 
@@ -302,7 +382,10 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
                     type="button"
                     aria-label={"More " + card.label + " options"}
                     onClick={() =>
-                      setNotice(card.label + " trend details arrive with live audits in Phase 2.")
+                      setNotice(
+                        card.label +
+                          " history will be available once audit persistence is added.",
+                      )
                     }
                   >
                     ···
@@ -310,11 +393,13 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
                 </div>
                 <div className="score-card-value-row">
                   <div className="score-ring" style={ringStyle}>
-                    <span>{score}</span>
+                    <span>{score === undefined ? "—" : score}</span>
                   </div>
                   <div className="score-card-trend">
-                    <span className="trend-neutral">baseline</span>
-                    <small>Needs attention</small>
+                    <span className="trend-neutral">
+                      {audit ? "current" : "waiting"}
+                    </span>
+                    <small>{audit ? "Ready to improve" : "Run an audit"}</small>
                   </div>
                 </div>
               </article>
@@ -333,19 +418,29 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
                 className="card-menu"
                 type="button"
                 aria-label="More broken links options"
-                onClick={() => setNotice("Link checks arrive with the Phase 2 audit pipeline.")}
+                onClick={() => setNotice("Broken links are checked within each live audit.")}
               >
                 ···
               </button>
             </div>
             <div className="broken-link-value">
-              <strong>{demoAudit.brokenLinks}</strong>
+              <strong>{audit ? audit.brokenLinks : "—"}</strong>
               <span>found</span>
             </div>
             <div className="broken-link-bar">
-              <span style={{ width: "58%" }} />
+              <span
+                style={{
+                  width: audit
+                    ? Math.min(100, audit.brokenLinks * 18) + "%"
+                    : "0%",
+                }}
+              />
             </div>
-            <small className="score-card-footnote">3 routes need review</small>
+            <small className="score-card-footnote">
+              {audit
+                ? (audit.checkedLinks ?? 0) + " same-site routes checked"
+                : "Awaiting audit"}
+            </small>
           </article>
         </div>
 
@@ -359,45 +454,66 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
               <button
                 className="filter-button"
                 type="button"
-                onClick={() => setNotice("Issue filters arrive with live audit data in Phase 2.")}
+                onClick={() => setNotice("Issue filters will be added alongside audit history.")}
               >
                 All issues
                 <span>⌄</span>
               </button>
             </div>
             <div className="issue-list">
-              {demoAudit.issues.map((issue) => (
-                <button
-                  className={"issue-row " + (selectedIssue.id === issue.id ? "selected" : "")}
-                  key={issue.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedIssueId(issue.id);
-                    setNotice("");
-                  }}
-                >
-                  <span className={"severity-mark severity-" + issue.severity} />
-                  <span className="issue-row-copy">
-                    <span className="issue-row-title">{issue.title}</span>
-                    <span className="issue-row-meta">
-                      {formatCategory(issue.category)} · {formatPage(issue.pageUrl)}
+              {issues.length > 0 ? (
+                issues.map((issue) => (
+                  <button
+                    className={
+                      "issue-row " +
+                      (selectedIssue?.id === issue.id ? "selected" : "")
+                    }
+                    key={issue.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedIssueId(issue.id);
+                      setNotice("");
+                    }}
+                  >
+                    <span className={"severity-mark severity-" + issue.severity} />
+                    <span className="issue-row-copy">
+                      <span className="issue-row-title">{issue.title}</span>
+                      <span className="issue-row-meta">
+                        {formatCategory(issue.category)} · {formatPage(issue.pageUrl)}
+                      </span>
                     </span>
+                    <span className={"severity-badge severity-badge-" + issue.severity}>
+                      {issue.severity}
+                    </span>
+                    <ArrowRight className="issue-row-arrow" width={15} height={15} />
+                  </button>
+                ))
+              ) : (
+                <div className="empty-state">
+                  <span className="empty-state-icon">
+                    {scanError ? (
+                      <AlertTriangle width={17} height={17} />
+                    ) : (
+                      <CheckCircle width={17} height={17} />
+                    )}
                   </span>
-                  <span className={"severity-badge severity-badge-" + issue.severity}>
-                    {issue.severity}
+                  <strong>{scanError ? "Audit unavailable" : "No issues found"}</strong>
+                  <span>
+                    {scanError
+                      ? "Fix the target or try the scan again."
+                      : "The completed audit did not find any normalized findings."}
                   </span>
-                  <ArrowRight className="issue-row-arrow" width={15} height={15} />
-                </button>
-              ))}
+                </div>
+              )}
             </div>
             <div className="panel-footer">
               <span>
-                Showing {demoAudit.issues.length} of {demoAudit.issues.length} findings
+                Showing {issues.length} of {issues.length} findings
               </span>
               <button
                 className="text-button"
                 type="button"
-                onClick={() => setNotice("Pagination is unnecessary for the Phase 1 demo dataset.")}
+                onClick={() => setNotice("This audit is small enough to show in one view.")}
               >
                 View all
                 <ArrowRight width={14} height={14} />
@@ -411,31 +527,31 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
                 <span className="micro-label">SELECTED ISSUE</span>
                 <h2>Why this matters</h2>
               </div>
-              <span className={"severity-badge severity-badge-" + selectedIssue.severity}>
-                {selectedIssue.severity}
+              <span className={"severity-badge severity-badge-" + displayIssue.severity}>
+                {displayIssue.severity}
               </span>
             </div>
             <div className="detail-content">
               <div className="detail-title-row">
-                <span className={"detail-category-icon category-" + selectedIssue.category}>
-                  {selectedIssue.category === "accessibility" ? (
+                <span className={"detail-category-icon category-" + displayIssue.category}>
+                  {displayIssue.category === "accessibility" ? (
                     <ShieldCheck width={18} height={18} />
-                  ) : selectedIssue.category === "performance" ? (
+                  ) : displayIssue.category === "performance" ? (
                     <Gauge width={18} height={18} />
                   ) : (
                     <Search width={18} height={18} />
                   )}
                 </span>
-                <h3>{selectedIssue.title}</h3>
+                <h3>{displayIssue.title}</h3>
               </div>
-              <p className="detail-description">{selectedIssue.description}</p>
+              <p className="detail-description">{displayIssue.description}</p>
 
               <div className="detail-block">
                 <span className="detail-label">
                   <Code2 width={14} height={14} />
                   Evidence
                 </span>
-                <code className="evidence-block">{selectedIssue.evidence}</code>
+                <code className="evidence-block">{displayIssue.evidence}</code>
               </div>
 
               <div className="detail-block source-block">
@@ -445,19 +561,19 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
                 </span>
                 <div className="source-hint">
                   <div>
-                    <strong>{selectedIssue.sourceHint?.filePath ?? "Source unavailable"}</strong>
+                    <strong>{displayIssue.sourceHint?.filePath ?? "Source unavailable"}</strong>
                     <span>
-                      {selectedIssue.sourceHint
+                      {displayIssue.sourceHint
                         ? "Lines " +
-                          selectedIssue.sourceHint.lineStart +
+                          displayIssue.sourceHint.lineStart +
                           "–" +
-                          selectedIssue.sourceHint.lineEnd
+                          displayIssue.sourceHint.lineEnd
                         : "Connect a repository to inspect source"}
                     </span>
                   </div>
-                  {selectedIssue.sourceHint ? (
+                  {displayIssue.sourceHint ? (
                     <span className="confidence-badge">
-                      {Math.round(selectedIssue.sourceHint.confidence * 100)}% match
+                      {Math.round(displayIssue.sourceHint.confidence * 100)}% match
                     </span>
                   ) : null}
                 </div>
@@ -469,7 +585,7 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
                 </span>
                 <span>
                   <strong>Expected impact</strong>
-                  <small>{selectedIssue.estimatedImpact}</small>
+                  <small>{displayIssue.estimatedImpact}</small>
                 </span>
               </div>
 
@@ -564,8 +680,8 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
                 <Code2 width={16} height={16} />
               </span>
               <span>
-                <strong>{selectedIssue.sourceHint?.filePath ?? "unmapped source"}</strong>
-                <small>{selectedIssue.title}</small>
+                <strong>{displayIssue.sourceHint?.filePath ?? "unmapped source"}</strong>
+                <small>{displayIssue.title}</small>
               </span>
               <span className="safe-badge">SAFE CHANGE</span>
             </div>
@@ -580,11 +696,11 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
               </div>
               <div className="diff-row diff-row-delete">
                 <span>−</span>
-                <code>{selectedIssue.evidence ?? "Existing implementation"}</code>
+                <code>{displayIssue.evidence ?? "Existing implementation"}</code>
               </div>
               <div className="diff-row diff-row-add">
                 <span>+</span>
-                <code>{getProposedLine(selectedIssue)}</code>
+                <code>{getProposedLine(displayIssue)}</code>
               </div>
               <div className="diff-row diff-row-context">
                 <span> </span>
@@ -597,7 +713,7 @@ export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
               </span>
               <p>
                 This draft addresses the selected finding without changing
-                navigation or visual layout. Phase 1 records the review state
+                navigation or visual layout. Phase 2 records the review state
                 only; repository writes arrive after the source integration
                 phase.
               </p>
@@ -645,23 +761,25 @@ function formatPage(value: string) {
 }
 
 function getProposedLine(issue: Issue) {
-  if (issue.id === "issue_img_alt") {
+  const title = issue.title.toLowerCase();
+
+  if (issue.id === "issue_img_alt" || title.includes("alternative text")) {
     return '<img src="/images/hero.webp" alt="Team reviewing a website audit" />';
   }
 
-  if (issue.id === "issue_form_label") {
+  if (issue.id === "issue_form_label" || title.includes("associated label")) {
     return '<label htmlFor="email">Email address</label>';
   }
 
-  if (issue.id === "issue_hero_size") {
+  if (issue.id === "issue_hero_size" || title.includes("rendered need")) {
     return '<img src="/images/hero-640.webp" width="640" height="420" alt="Hero image" />';
   }
 
-  if (issue.id === "issue_blocking_script") {
+  if (issue.id === "issue_blocking_script" || title.includes("render-blocking")) {
     return '<Script src="/analytics.js" strategy="afterInteractive" />';
   }
 
-  if (issue.id === "issue_meta_description") {
+  if (issue.id === "issue_meta_description" || title.includes("meta description")) {
     return 'description: "A concise summary of the site",';
   }
 

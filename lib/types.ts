@@ -38,6 +38,10 @@ export type Audit = {
   scores: Partial<Record<ScoreKey, number>>;
   brokenLinks: number;
   issues: Issue[];
+  finalUrl?: string;
+  responseBytes?: number;
+  responseTimeMs?: number;
+  checkedLinks?: number;
 };
 
 export type FilePatch = {
