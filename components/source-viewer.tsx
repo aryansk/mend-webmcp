@@ -104,7 +104,7 @@ export function SourceViewer({
         </div>
 
         <div className="source-viewer-footer">
-          <span>Source changes remain unavailable until the apply phase.</span>
+          <span>Main remains read-only; approved changes are recorded on a branch snapshot.</span>
           <button className="secondary-button" type="button" onClick={onClose}>
             Close viewer
           </button>

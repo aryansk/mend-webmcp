@@ -1,6 +1,7 @@
 import type {
   Audit,
   AuditCategory,
+  AppliedFix,
   Issue,
   ProposedFix,
   Severity,
@@ -37,6 +38,7 @@ let repositoryCache: {
 export type MendToolCallbacks = {
   onAudit: (audit: Audit) => void;
   onFix?: (fix: ProposedFix) => void;
+  onApply?: (fix: ProposedFix, branch: AppliedFix) => void;
 };
 
 export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
@@ -318,6 +320,39 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
             fixId: fix.id,
             approvalStatus: fix.approvalStatus,
             requiresHumanApproval: true,
+          };
+        }),
+    },
+    {
+      ...MEND_TOOL_METADATA.apply_approved_fix,
+      execute: (input, context) =>
+        safelyExecute(context, async () => {
+          const values = readRecord(input);
+          const fixId = readRequiredString(values, "fixId");
+          const payload = asRecord(
+            await requestMendApi("/api/fixes/apply", {
+              body: JSON.stringify({ fixId }),
+              method: "POST",
+              signal: context.signal,
+            }),
+          );
+          const fix = readFix(payload);
+          const branch = readAppliedFix(payload.branch);
+
+          cacheFix(fix);
+          callbacks.onFix?.(fix);
+          callbacks.onApply?.(fix, branch);
+
+          return {
+            applied: true,
+            fixId: fix.id,
+            branchName: branch.branchName,
+            baseBranch: branch.baseBranch,
+            commitSha: branch.commitSha,
+            filesChanged: branch.filesChanged,
+            filePaths: branch.filePaths,
+            pullRequestUrl: branch.pullRequestUrl,
+            sourceMutation: false,
           };
         }),
     },
@@ -648,6 +683,14 @@ function readFix(payload: Record<string, unknown>): ProposedFix {
   }
 
   return value as ProposedFix;
+}
+
+function readAppliedFix(value: unknown): AppliedFix {
+  if (!value || typeof value !== "object") {
+    throw new Error("The fix service returned no branch record.");
+  }
+
+  return value as AppliedFix;
 }
 
 async function fetchFix(fixId: string, signal: AbortSignal) {

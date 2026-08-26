@@ -112,6 +112,8 @@ export function getFixDiffPayload(fix: ProposedFix) {
     createdAt: fix.createdAt,
     approvalRequestedAt: fix.approvalRequestedAt,
     decisionAt: fix.decisionAt,
+    applied: fix.applied,
+    appliedAt: fix.appliedAt,
     explanation: fix.explanation,
     expectedImpact: fix.expectedImpact,
     constraints: fix.constraints,

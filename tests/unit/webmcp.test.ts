@@ -59,6 +59,9 @@ describe("Mend WebMCP tools", () => {
     expect(MEND_TOOL_METADATA.request_fix_approval.annotations.readOnlyHint).toBe(
       false,
     );
+    expect(MEND_TOOL_METADATA.apply_approved_fix.annotations.readOnlyHint).toBe(
+      false,
+    );
   });
 
   it("returns a compact scan result and synchronizes the UI callback", async () => {
@@ -264,6 +267,60 @@ describe("Mend WebMCP tools", () => {
     expect(onFix).toHaveBeenNthCalledWith(1, fix);
     expect(onFix).toHaveBeenNthCalledWith(2, approvedFix);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("applies an approved fix through a branch-first response", async () => {
+    const fix = {
+      id: "fix_demo_issue_img_alt_apply",
+      fixId: "fix_demo_issue_img_alt_apply",
+      repositoryId: "repo_demo_001",
+      issueIds: ["issue_img_alt"],
+      status: "applied",
+      approvalStatus: "approved",
+      explanation: "A bounded demo patch.",
+      expectedImpact: ["Improves accessible naming."],
+      constraints: [],
+      files: [],
+      requiresHumanApproval: true,
+    };
+    const branch = {
+      fixId: fix.id,
+      repositoryId: "repo_demo_001",
+      branchName: "mend/fix/" + fix.id,
+      baseBranch: "main",
+      commitSha: "a".repeat(40),
+      filesChanged: 1,
+      filePaths: ["components/Hero.tsx"],
+      createdAt: "2026-08-26T08:00:00.000Z",
+      pullRequestUrl: null,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        applied: true,
+        fix,
+        branch,
+        sourceMutation: false,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const onApply = vi.fn();
+    const tools = createMendTools({ onAudit: vi.fn(), onApply });
+    const applyTool = tools.find((tool) => tool.name === "apply_approved_fix");
+
+    const result = await applyTool?.execute({ fixId: fix.id }, toolContext);
+
+    expect(result).toMatchObject({
+      applied: true,
+      fixId: fix.id,
+      branchName: branch.branchName,
+      baseBranch: "main",
+      sourceMutation: false,
+    });
+    expect(onApply).toHaveBeenCalledWith(fix, branch);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/fixes/apply",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("registers every tool and aborts the registration signal on cleanup", async () => {

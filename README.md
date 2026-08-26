@@ -5,10 +5,11 @@ a shared human and agent workflow: scan, understand, propose, approve, fix, and
 verify.
 
 The project is being built for the OpenAI WebMCP Challenge. The current
-checkpoint is Phase 5: a polished, responsive UI backed by a bounded server-side
-audit pipeline, eleven feature-detected WebMCP tools, a connected controlled
-repository source viewer, and a deterministic proposed-fix review flow.
-Repository writes are intentionally not enabled yet.
+checkpoint is Phase 6: a polished, responsive UI backed by a bounded server-side
+audit pipeline, twelve feature-detected WebMCP tools, a connected controlled
+repository source viewer, and a branch-first approved-fix flow. The controlled
+demo records an isolated branch snapshot while keeping its checked-in main
+fixture unchanged.
 
 ## Live demo
 
@@ -24,9 +25,11 @@ diffs, approval, and verification in one workspace.
 WebMCP adds a structured agent control plane to the same human UI. An agent can
 call compact tools to scan a site, retrieve a summary, filter issues, inspect
 evidence, compare audits, read mapped source context, generate an exact diff,
-and request human approval. Tool-triggered scans and fix proposals update the
-visible dashboard immediately, so the agent and human operate on the same
-state. The human still approves every source-changing action.
+and request human approval. After approval, the agent can create an isolated
+branch snapshot without editing main. Tool-triggered scans, fix proposals, and
+branch records update the visible dashboard immediately, so the agent and human
+operate on the same state. The human still approves every source-changing
+action.
 
 ## Current UI
 
@@ -44,6 +47,8 @@ state. The human still approves every source-changing action.
   original/proposed source and unified diffs.
 - Patch review modal that records waiting, approved, and rejected states without
   mutating a repository.
+- Branch-first apply action that verifies approval, validates the original
+  source context, and records a demo branch and commit without changing main.
 - Imperative WebMCP registration through `document.modelContext` with feature
   detection, abortable component lifecycle cleanup, and a visible registered
   tool status panel.
@@ -68,8 +73,10 @@ Install dependencies and start the development server:
 
 Open http://localhost:3000, choose Try the deterministic demo workspace, and
 select Scan site. On the dashboard, choose Connect demo repo, select an issue,
-and choose Inspect source to open the checked-in source context. You can also
-enter a public HTTPS URL to run the real server-side audit pipeline.
+and choose Inspect source to open the checked-in source context. Choose Propose
+safe fix, review the exact diff, approve it, and choose Apply approved patch to
+create the isolated demo branch record. You can also enter a public HTTPS URL
+to run the real server-side audit pipeline.
 
 Validation commands:
 
@@ -96,6 +103,7 @@ Validation commands:
       route.ts                 Deterministic proposal and diff API
       approval/route.ts          Human approval request API
       decision/route.ts          Explicit approve/reject API
+      apply/route.ts             Branch-first approved-fix API
     components/
       dashboard-page.tsx       Interactive audit workspace
       icons.tsx                Small inline SVG icon set
@@ -118,6 +126,7 @@ Validation commands:
         tools.ts               Audit and repository tool implementations
         types.ts               Local WebMCP TypeScript contract
       fixes/
+        apply.ts                Approval guard and branch snapshot store
         diff.ts                Bounded unified diff generation
         generator.ts           Controlled source patch plans
         service.ts             Proposal and approval state helpers
@@ -158,20 +167,21 @@ so stale tools are removed when the component unmounts.
 - propose_fix
 - get_fix_diff
 - request_fix_approval
+- apply_approved_fix
 
-`scan_site`, `propose_fix`, and `request_fix_approval` update Mend workspace
-state, so they are explicitly annotated as non-read-only. They never mutate the
-target repository. The remaining tools are read-only and return bounded JSON
-designed for agent reasoning. The repository and fix tools expose only the
-connected demo repository and never return credentials. The human-facing UI is
-the approval boundary: a decision is rejected unless the fix is already waiting
-for human review. Source changes will be branch-first rather than direct changes
-to main in the apply phase.
+`scan_site`, `propose_fix`, `request_fix_approval`, and `apply_approved_fix`
+update Mend workspace state, so they are explicitly annotated as non-read-only.
+`apply_approved_fix` verifies both approval status and source context before
+creating a controlled-demo branch snapshot; it never edits main. The remaining
+tools are read-only and return bounded JSON designed for agent reasoning. The
+repository and fix tools expose only the connected demo repository and never
+return credentials. GitHub OAuth, real remote commits, and pull requests remain
+future integration work.
 
 ## Environment
 
 The environment template is .env.example. No environment variables are
-required for the Phase 5 audit pipeline, demo repository, or WebMCP tools.
+required for the Phase 6 audit pipeline, demo repository, or WebMCP tools.
 Future GitHub OAuth phases may use the following values:
 
 - NEXT_PUBLIC_APP_URL
@@ -191,16 +201,19 @@ pipeline validates URLs, blocks private-network targets and DNS results,
 manually validates redirects, bounds fetched content and resource probes, and
 uses request timeouts. The repository connector permits only known demo files,
 validates relative paths, bounds source reads, keeps all repository access on
-the server, and returns no tokens to the browser. Future source writes will
-require explicit human approval and preserve a reversible branch-based change
-path.
+the server, and returns no tokens to the browser. Future remote source writes
+will require explicit human approval and preserve a reversible branch-based
+change path.
 
-The Phase 5 server stores for audits, repositories, and proposed fixes are
-intentionally in-memory and suitable for the controlled demo only. After
+The Phase 6 server stores for audits, repositories, proposed fixes, and demo
+branch snapshots are intentionally in-memory and suitable for the controlled
+demo only. After
 `scan_site` and `propose_fix`, the browser keeps bounded same-page caches so the
 agent can continue from the exact state visible to the human across serverless
-requests. A full reload still loses non-demo audit and fix history. Durable
-persistence will be added only if it improves the judging workflow.
+requests. A full reload loses stored audit, fix, and branch history; the
+deterministic demo data can be rebuilt, but branch snapshots cannot.
+Durable persistence and real GitHub branches will be added only if they improve
+the judging workflow.
 
 ## WebMCP local testing
 
@@ -215,7 +228,7 @@ Then:
 2. Open `http://localhost:3000/dashboard?site=https://demo.mend.local` in the
    WebMCP-enabled browser.
 3. Confirm the dashboard status card changes from Checking to Ready and lists
-   the eleven registered tool names.
+   the twelve registered tool names.
 4. Ask the connected agent to call `scan_site` for `https://demo.mend.local`.
 5. Use the returned `auditId` with `get_audit_summary` and `list_issues`.
 6. Pass an issue ID from `list_issues` to `inspect_issue`.
@@ -228,9 +241,11 @@ Then:
 10. Ask the agent to call `get_fix_diff`, then `request_fix_approval` with the
     returned fix ID.
 11. Review the exact diff in Mend and click Approve patch or Reject patch.
-    Confirm the activity log records the human decision and that no source file
-    changes.
-12. Run a second scan and pass both IDs to `compare_audits`.
+    Confirm the activity log records the human decision.
+12. After approval, click Apply approved patch or ask the agent to call
+    `apply_approved_fix`. Confirm Mend shows a `mend/fix/...` branch, a commit
+    record, and that main source still contains the original issue.
+13. Run a second scan and pass both IDs to `compare_audits`.
 
 Browsers without WebMCP still support manual scanning and issue inspection; the
 status card reports that the agent control plane is unavailable. Final judging

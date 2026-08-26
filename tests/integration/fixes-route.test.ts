@@ -2,11 +2,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { POST as proposeFix } from "../../app/api/fixes/route";
 import { POST as requestApproval } from "../../app/api/fixes/approval/route";
 import { POST as decideFix } from "../../app/api/fixes/decision/route";
+import { POST as applyFix } from "../../app/api/fixes/apply/route";
+import { clearDemoBranchStore } from "../../lib/fixes/apply";
 import { clearFixStore } from "../../lib/fixes/store";
 import { readDemoRepositoryFile } from "../../lib/repository/files";
 
 afterEach(() => {
   clearFixStore();
+  clearDemoBranchStore();
 });
 
 describe("fix proposal and approval APIs", () => {
@@ -88,6 +91,18 @@ describe("fix proposal and approval APIs", () => {
       }),
     );
     const proposal = (await proposalResponse.json()) as { fix: { id: string } };
+    const earlyApply = await applyFix(
+      new Request("http://localhost/api/fixes/apply", {
+        method: "POST",
+        body: JSON.stringify({ fixId: proposal.fix.id }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const earlyApplyPayload = (await earlyApply.json()) as { code?: string };
+
+    expect(earlyApply.status).toBe(409);
+    expect(earlyApplyPayload.code).toBe("approval_required");
+
     const approvalResponse = await requestApproval(
       new Request("http://localhost/api/fixes/approval", {
         method: "POST",
@@ -121,5 +136,86 @@ describe("fix proposal and approval APIs", () => {
       approvalStatus: "approved",
     });
     expect(source.content).toContain("<h3>Human approval</h3>");
+  });
+
+  it("creates an isolated branch record only after approval and leaves main untouched", async () => {
+    const before = await readDemoRepositoryFile("components/Hero.tsx");
+    const proposalResponse = await proposeFix(
+      new Request("http://localhost/api/fixes", {
+        method: "POST",
+        body: JSON.stringify({
+          repositoryId: "repo_demo_001",
+          issueIds: ["issue_img_alt"],
+        }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const proposal = (await proposalResponse.json()) as { fix: { id: string } };
+    const approvalResponse = await requestApproval(
+      new Request("http://localhost/api/fixes/approval", {
+        method: "POST",
+        body: JSON.stringify({ fixId: proposal.fix.id }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    expect(approvalResponse.status).toBe(200);
+    await decideFix(
+      new Request("http://localhost/api/fixes/decision", {
+        method: "POST",
+        body: JSON.stringify({
+          fixId: proposal.fix.id,
+          decision: "approved",
+        }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const applyResponse = await applyFix(
+      new Request("http://localhost/api/fixes/apply", {
+        method: "POST",
+        body: JSON.stringify({ fixId: proposal.fix.id }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const applyPayload = (await applyResponse.json()) as {
+      applied?: boolean;
+      sourceMutation?: boolean;
+      fix?: { status: string; approvalStatus: string };
+      branch?: {
+        branchName: string;
+        baseBranch: string;
+        commitSha: string;
+        filesChanged: number;
+      };
+    };
+    const after = await readDemoRepositoryFile("components/Hero.tsx");
+
+    expect(applyResponse.status).toBe(200);
+    expect(applyPayload).toMatchObject({
+      applied: true,
+      sourceMutation: false,
+      fix: { status: "applied", approvalStatus: "approved" },
+      branch: {
+        branchName: "mend/fix/" + proposal.fix.id,
+        baseBranch: "main",
+        filesChanged: 1,
+      },
+    });
+    expect(applyPayload.branch?.commitSha).toHaveLength(40);
+    expect(after.content).toBe(before.content);
+
+    const repeatResponse = await applyFix(
+      new Request("http://localhost/api/fixes/apply", {
+        method: "POST",
+        body: JSON.stringify({ fixId: proposal.fix.id }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const repeatPayload = (await repeatResponse.json()) as {
+      branch?: { commitSha: string };
+    };
+
+    expect(repeatResponse.status).toBe(200);
+    expect(repeatPayload.branch?.commitSha).toBe(applyPayload.branch?.commitSha);
   });
 });

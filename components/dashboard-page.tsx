@@ -33,6 +33,7 @@ import { WebMcpBridge } from "./webmcp-bridge";
 import { SourceViewer } from "./source-viewer";
 import type {
   ActivityEvent,
+  AppliedFix,
   Audit,
   AuditCategory,
   Issue,
@@ -123,8 +124,10 @@ export function DashboardPage({
   const [isScanning, setIsScanning] = useState(false);
   const [patchVisible, setPatchVisible] = useState(false);
   const [activeFix, setActiveFix] = useState<ProposedFix | null>(null);
+  const [appliedBranch, setAppliedBranch] = useState<AppliedFix | null>(null);
   const [isProposing, setIsProposing] = useState(false);
   const [isFixDecisionPending, setIsFixDecisionPending] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
   const [notice, setNotice] = useState("");
   const [scanError, setScanError] = useState(initialError ?? "");
   const [fixError, setFixError] = useState("");
@@ -149,6 +152,7 @@ export function DashboardPage({
       setScanError("");
       setSourceView(null);
       setActiveFix(null);
+      setAppliedBranch(null);
       setPatchVisible(false);
       setActivity((current) => [
         {
@@ -178,6 +182,7 @@ export function DashboardPage({
 
   const handleToolFix = useCallback((fix: ProposedFix) => {
     setActiveFix(fix);
+    setAppliedBranch(fix.applied ?? null);
     setPatchVisible(true);
     setFixError("");
     setNotice(
@@ -198,6 +203,26 @@ export function DashboardPage({
           (fix.files.length === 1 ? "" : "s") +
           " ready for review.",
         tone: "neutral",
+        time: "just now",
+      },
+      ...current,
+    ]);
+  }, []);
+
+  const handleToolApply = useCallback((fix: ProposedFix, branch: AppliedFix) => {
+    setActiveFix(fix);
+    setAppliedBranch(branch);
+    setPatchVisible(true);
+    setFixError("");
+    setNotice(
+      "Created " + branch.branchName + " from the approved patch. Main remains unchanged.",
+    );
+    setActivity((current) => [
+      {
+        id: "activity-" + Date.now(),
+        label: "Demo branch created",
+        detail: branch.branchName + " · commit " + branch.commitSha.slice(0, 8),
+        tone: "success",
         time: "just now",
       },
       ...current,
@@ -425,6 +450,7 @@ export function DashboardPage({
       }
 
       setActiveFix(approvalPayload.fix);
+      setAppliedBranch(null);
       setPatchVisible(true);
       setNotice("A patch is ready. Review it and make the approval decision.");
       setActivity((current) => [
@@ -472,18 +498,19 @@ export function DashboardPage({
       }
 
       setActiveFix(payload.fix);
+      setAppliedBranch(null);
       setNotice(
         decision === "approved"
-          ? "Human approval recorded. No source changed; applying arrives in Phase 6."
+          ? "Human approval recorded. Review once more, then apply to a safe branch."
           : "Patch rejected. No source changed.",
       );
       setActivity((current) => [
         {
           id: "activity-" + Date.now(),
           label: decision === "approved" ? "Human approval recorded" : "Patch rejected",
-          detail:
+            detail:
             decision === "approved"
-              ? "The patch is approved but still cannot mutate source."
+              ? "The patch is approved and ready for branch-first application."
               : "The proposed source change was discarded.",
           tone: decision === "approved" ? "success" : "warning",
           time: "just now",
@@ -501,10 +528,73 @@ export function DashboardPage({
     }
   }
 
+  async function handleApplyFix() {
+    if (!activeFix) {
+      return;
+    }
+
+    if (activeFix.approvalStatus !== "approved" || activeFix.status !== "approved") {
+      setNotice("A human must approve this patch before it can be applied.");
+      return;
+    }
+
+    setIsApplying(true);
+    setFixError("");
+
+    try {
+      const response = await fetch("/api/fixes/apply", {
+        body: JSON.stringify({ fixId: activeFix.id }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json()) as {
+        fix?: ProposedFix;
+        branch?: AppliedFix;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.fix || !payload.branch) {
+        throw new Error(payload.error ?? "The approved fix could not be applied.");
+      }
+
+      setActiveFix(payload.fix);
+      setAppliedBranch(payload.branch);
+      setNotice(
+        "Created " +
+          payload.branch.branchName +
+          " with commit " +
+          payload.branch.commitSha.slice(0, 8) +
+          ". Main remains unchanged.",
+      );
+      setActivity((current) => [
+        {
+          id: "activity-" + Date.now(),
+          label: "Demo branch created",
+          detail:
+            payload.branch?.branchName +
+            " · commit " +
+            payload.branch?.commitSha.slice(0, 8),
+          tone: "success",
+          time: "just now",
+        },
+        ...current,
+      ]);
+    } catch (error) {
+      setFixError(
+        error instanceof Error
+          ? error.message
+          : "The approved fix could not be applied.",
+      );
+    } finally {
+      setIsApplying(false);
+    }
+  }
+
   return (
     <main className="dashboard-page">
       <WebMcpBridge
         onAudit={handleToolAudit}
+        onApply={handleToolApply}
         onFix={handleToolFix}
         onStatus={handleWebMcpStatus}
       />
@@ -594,7 +684,7 @@ export function DashboardPage({
             <span className="status-progress-label">
               {webmcpStatus.state === "ready"
                   ? webmcpStatus.registeredTools.length + " tools registered"
-                : "Phase 5 of 8"}
+                : "Phase 6 of 8"}
             </span>
             {webmcpStatus.registeredTools.length > 0 ? (
               <div className="webmcp-tool-list" aria-label="Registered WebMCP tools">
@@ -830,6 +920,7 @@ export function DashboardPage({
                     onClick={() => {
                       setSelectedIssueId(issue.id);
                       setActiveFix(null);
+                      setAppliedBranch(null);
                       setPatchVisible(false);
                       setNotice("");
                     }}
@@ -1114,9 +1205,25 @@ export function DashboardPage({
                   "This patch will be shown here before any source-changing action."} {" "}
                 {activeFix?.constraints.length
                   ? "Constraints: " + activeFix.constraints.join(" · ") + "."
-                  : "Source writes remain disabled until the next phase."}
+                  : "Applying creates an isolated branch snapshot; main remains unchanged."}
               </p>
             </div>
+            {appliedBranch ? (
+              <div className="patch-branch-result">
+                <span className="patch-branch-icon">
+                  <GitBranch width={15} height={15} />
+                </span>
+                <span>
+                  <strong>Branch snapshot created</strong>
+                  <small>
+                    {appliedBranch.branchName} · from {appliedBranch.baseBranch}
+                  </small>
+                </span>
+                <code title={appliedBranch.commitSha}>
+                  {appliedBranch.commitSha.slice(0, 8)}
+                </code>
+              </div>
+            ) : null}
             <div className="patch-modal-footer">
               <button
                 className="secondary-button"
@@ -1158,6 +1265,25 @@ export function DashboardPage({
                 )}
                 {activeFix?.approvalStatus === "approved" ? "Approved" : "Approve patch"}
               </button>
+              {activeFix?.approvalStatus === "approved" ? (
+                <button
+                  className={"primary-button apply-button " + (appliedBranch ? "button-approved" : "")}
+                  type="button"
+                  onClick={handleApplyFix}
+                  disabled={isApplying || Boolean(appliedBranch)}
+                >
+                  {appliedBranch ? (
+                    <Check width={15} height={15} />
+                  ) : (
+                    <GitBranch width={15} height={15} />
+                  )}
+                  {isApplying
+                    ? "Creating branch…"
+                    : appliedBranch
+                      ? "Branch created"
+                      : "Apply approved patch"}
+                </button>
+              ) : null}
             </div>
           </section>
         </div>

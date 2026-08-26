@@ -5,20 +5,22 @@ import {
   registerMendTools,
   type WebMcpStatus,
 } from "../lib/webmcp/register-tools";
-import type { Audit, ProposedFix } from "../lib/types";
+import type { AppliedFix, Audit, ProposedFix } from "../lib/types";
 
 export function WebMcpBridge({
   onAudit,
+  onApply,
   onFix,
   onStatus,
 }: {
   onAudit: (audit: Audit) => void;
+  onApply: (fix: ProposedFix, branch: AppliedFix) => void;
   onFix: (fix: ProposedFix) => void;
   onStatus: (status: WebMcpStatus) => void;
 }) {
   useEffect(
-    () => registerMendTools({ onAudit, onFix, onStatus }),
-    [onAudit, onFix, onStatus],
+    () => registerMendTools({ onAudit, onApply, onFix, onStatus }),
+    [onAudit, onApply, onFix, onStatus],
   );
 
   return null;

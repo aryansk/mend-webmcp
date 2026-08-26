@@ -13,6 +13,7 @@ export const MEND_TOOL_NAMES = [
   "propose_fix",
   "get_fix_diff",
   "request_fix_approval",
+  "apply_approved_fix",
 ] as const;
 
 export type MendToolName = (typeof MEND_TOOL_NAMES)[number];
@@ -320,6 +321,27 @@ export const MEND_TOOL_METADATA: Record<MendToolName, MendToolMetadata> = {
         fixId: {
           type: "string",
           description: "The proposal identifier to surface for review.",
+        },
+      },
+      required: ["fixId"],
+      additionalProperties: false,
+    },
+    annotations: {
+      readOnlyHint: false,
+      untrustedContentHint: true,
+    },
+  },
+  apply_approved_fix: {
+    name: "apply_approved_fix",
+    title: "Apply an approved fix",
+    description:
+      "Apply a fix only after the human-facing Mend UI records approval; this creates a branch-first controlled-demo snapshot and never edits main.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fixId: {
+          type: "string",
+          description: "The approved proposal identifier to apply.",
         },
       },
       required: ["fixId"],

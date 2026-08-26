@@ -2025,6 +2025,65 @@ a {
   margin: 4px 0 0;
 }
 
+.patch-branch-result {
+  align-items: center;
+  background: rgba(185, 243, 107, 0.07);
+  border: 1px solid rgba(185, 243, 107, 0.18);
+  border-radius: 9px;
+  display: flex;
+  gap: 9px;
+  margin: 16px 23px 0;
+  padding: 10px 11px;
+}
+
+.patch-branch-icon {
+  align-items: center;
+  background: rgba(185, 243, 107, 0.12);
+  border-radius: 6px;
+  color: var(--lime);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 27px;
+  justify-content: center;
+  width: 27px;
+}
+
+.patch-branch-result > span:nth-child(2) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.patch-branch-result strong {
+  color: #d8ffae;
+  font-size: 10px;
+  font-weight: 680;
+}
+
+.patch-branch-result small {
+  color: #8d9d83;
+  font-size: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.patch-branch-result code {
+  color: #b9f36b;
+  font-size: 9px;
+}
+
+.apply-button {
+  background: #a78bfa;
+  color: #100d19;
+}
+
+.apply-button:hover:not(:disabled) {
+  background: #b9a1ff;
+}
+
 .patch-modal-footer {
   display: flex;
   gap: 8px;
@@ -2538,6 +2597,12 @@ a {
   .patch-modal-explanation {
     padding-left: 16px;
     padding-right: 16px;
+  }
+
+  .patch-branch-result {
+    align-items: flex-start;
+    margin-left: 16px;
+    margin-right: 16px;
   }
 
   .patch-modal-footer {

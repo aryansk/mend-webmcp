@@ -59,6 +59,18 @@ export type FixApprovalStatus =
   | "approved"
   | "rejected";
 
+export type AppliedFix = {
+  fixId: string;
+  repositoryId: string;
+  branchName: string;
+  baseBranch: string;
+  commitSha: string;
+  filesChanged: number;
+  filePaths: string[];
+  createdAt: string;
+  pullRequestUrl: string | null;
+};
+
 export type ProposedFix = {
   id: string;
   repositoryId: string;
@@ -72,6 +84,8 @@ export type ProposedFix = {
   approvalStatus: FixApprovalStatus;
   approvalRequestedAt?: string;
   decisionAt?: string;
+  applied?: AppliedFix;
+  appliedAt?: string;
 };
 
 export type ActivityEvent = {
