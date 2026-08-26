@@ -146,6 +146,11 @@ Validation commands:
       icons.tsx                Small inline SVG icon set
       landing-page.tsx         Landing and demo entry point
       source-viewer.tsx        Read-only mapped source viewer
+    docs/
+      DEVPOST-SUBMISSION.md   Prepared submission copy and judge steps
+      DEMO-VIDEO.md            Narration, metadata, and video artifact details
+    public/
+      mend-dashboard-preview.png  Product screenshot used in this README
     lib/
       audit/
         analyzers.ts           HTML issue normalization and score calculation
