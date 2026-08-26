@@ -5,9 +5,9 @@ a shared human and agent workflow: scan, understand, propose, approve, fix, and
 verify.
 
 The project is being built for the OpenAI WebMCP Challenge. The current
-checkpoint is Phase 2: a polished, responsive UI backed by a bounded server-side
-audit pipeline. WebMCP registration, source integration, and repository writes
-are intentionally not enabled yet.
+checkpoint is Phase 3: a polished, responsive UI backed by a bounded server-side
+audit pipeline and five feature-detected WebMCP read-only tools. Source
+integration and repository writes are intentionally not enabled yet.
 
 ## Live demo
 
@@ -20,10 +20,11 @@ developers have tools that can edit source code. The difficult part is the
 handoff between those systems. Mend keeps evidence, source hints, proposed
 diffs, approval, and verification in one workspace.
 
-WebMCP will add a structured agent control plane to the same human UI. An agent
-will be able to call compact tools such as scan_site, list_issues,
-inspect_issue, propose_fix, and verify_fix. The human will still approve every
-source-changing action.
+WebMCP adds a structured agent control plane to the same human UI. An agent can
+call compact tools to scan a site, retrieve a summary, filter issues, inspect
+evidence, and compare two audits. A tool-triggered scan updates the visible
+dashboard immediately, so the agent and human operate on the same state. The
+human will still approve every source-changing action in later phases.
 
 ## Current UI
 
@@ -39,6 +40,11 @@ source-changing action.
   bounded resource probes.
 - Draft patch review modal that makes the approval boundary visible without
   mutating a repository.
+- Imperative WebMCP registration through `document.modelContext` with feature
+  detection, abortable component lifecycle cleanup, and a visible registered
+  tool status panel.
+- Compact WebMCP responses backed by the same audit API as the human UI,
+  including issue inspection and before/after comparison.
 - Activity timeline, loading states, recoverable errors, and mobile layouts.
 
 ## Run locally
@@ -86,6 +92,14 @@ Validation commands:
         summary.ts             Compact audit summary helpers
         store.ts               Lightweight in-memory audit store
         url-safety.ts          URL validation and SSRF protections
+        compare.ts             Before/after issue and score comparison
+      webmcp/
+        api.ts                 Browser client for audit tool requests
+        feature-detect.ts      document.modelContext detection
+        register-tools.ts      Abortable tool registration lifecycle
+        tool-schemas.ts        Compact JSON schemas and annotations
+        tools.ts               Five audit tool implementations
+        types.ts               Local WebMCP TypeScript contract
       demo-data.ts             Controlled demo audit
       types.ts                 Stable domain model
     tests/unit/
@@ -95,10 +109,12 @@ Validation commands:
     tests/integration/
       audits-route.test.ts     API and category-filter coverage
 
-## Planned WebMCP surface
+## WebMCP tool surface
 
-WebMCP registration begins in Phase 3 and will use document.modelContext with
-feature detection. The planned read-only tools are:
+The dashboard registers these tools with `document.modelContext` when the
+browser exposes the imperative WebMCP API. `navigator.modelContext` is not
+used. Registration is tied to the dashboard lifecycle with an `AbortController`
+so stale tools are removed when the component unmounts.
 
 - scan_site
 - get_audit_summary
@@ -106,14 +122,17 @@ feature detection. The planned read-only tools are:
 - inspect_issue
 - compare_audits
 
-Proposed fixes and repository writes will be separate tools. Any mutating tool
-will require an approval state recorded by the human-facing UI, and source
-changes will be branch-first rather than direct changes to main.
+`scan_site` creates an in-memory audit record but does not change the target
+site, so it is explicitly annotated as non-read-only. The other four tools are
+read-only and return bounded JSON designed for agent reasoning. Proposed fixes
+and repository writes will be separate tools. Any mutating tool will require an
+approval state recorded by the human-facing UI, and source changes will be
+branch-first rather than direct changes to main.
 
 ## Environment
 
 The environment template is .env.example. No environment variables are
-required for the Phase 2 audit pipeline. Future phases may use the following
+required for the Phase 3 audit pipeline or WebMCP tools. Future phases may use the following
 values:
 
 - NEXT_PUBLIC_APP_URL
@@ -135,18 +154,33 @@ uses request timeouts. Future source flows will keep tokens server-side,
 validate patch paths, require explicit human approval, and preserve a reversible
 branch-based change path.
 
-The Phase 2 store is intentionally in-memory and suitable for the controlled
-demo only. Durable persistence will be added only if it improves the judging
+The Phase 3 store is intentionally in-memory and suitable for the controlled
+demo only. A tool call must reach the same running instance as the audit it
+references. Durable persistence will be added only if it improves the judging
 workflow.
 
 ## WebMCP local testing
 
-When the WebMCP layer is implemented, use a WebMCP-capable browser. Chrome
-local testing requires the WebMCP testing flag at:
+Use a WebMCP-capable browser. Chrome local testing requires the WebMCP testing
+flag at:
 
     chrome://flags/#enable-webmcp-testing
 
-Final judging validation will use the deployed HTTPS URL, not only localhost.
+Then:
+
+1. Start Mend with `npm run dev`.
+2. Open `http://localhost:3000/dashboard?site=https://demo.mend.local` in the
+   WebMCP-enabled browser.
+3. Confirm the dashboard status card changes from Checking to Ready and lists
+   the five registered tool names.
+4. Ask the connected agent to call `scan_site` for `https://demo.mend.local`.
+5. Use the returned `auditId` with `get_audit_summary` and `list_issues`.
+6. Pass an issue ID from `list_issues` to `inspect_issue`.
+7. Run a second scan and pass both IDs to `compare_audits`.
+
+Browsers without WebMCP still support manual scanning and issue inspection; the
+status card reports that the agent control plane is unavailable. Final judging
+validation will use the deployed HTTPS URL, not only localhost.
 
 ## License
 

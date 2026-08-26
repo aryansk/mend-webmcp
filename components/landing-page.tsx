@@ -276,9 +276,9 @@ export function LandingPage() {
             <span className="principle-number">03</span>
             <h3>WebMCP as the control plane</h3>
             <p>
-              The same workspace will expose compact tools for scanning,
-              inspecting, proposing, and verifying, without turning Mend into a
-              generic chat window.
+              The same workspace exposes compact tools for scanning, inspecting,
+              and comparing audits, without turning Mend into a generic chat
+              window.
             </p>
           </div>
         </div>
@@ -288,7 +288,7 @@ export function LandingPage() {
         <span>© 2026 Mend. Built for the WebMCP Challenge.</span>
         <span className="footer-status">
           <span className="state-dot" />
-          Phase 1 · UI shell
+          Phase 3 · WebMCP tools
         </span>
       </footer>
     </main>

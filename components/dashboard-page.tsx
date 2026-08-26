@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -22,6 +22,8 @@ import {
   X,
 } from "./icons";
 import { getAuditSummary } from "../lib/audit/summary";
+import type { WebMcpStatus } from "../lib/webmcp/register-tools";
+import { WebMcpBridge } from "./webmcp-bridge";
 import type {
   ActivityEvent,
   Audit,
@@ -70,10 +72,10 @@ const initialActivity: ActivityEvent[] = [
   },
   {
     id: "activity-2",
-    label: "WebMCP layer queued",
-    detail: "Read-only tools arrive in Phase 3.",
+    label: "WebMCP layer checking",
+    detail: "The active browser is being checked for document.modelContext.",
     tone: "neutral",
-    time: "Phase 2",
+    time: "now",
   },
   {
     id: "activity-3",
@@ -105,7 +107,7 @@ export function DashboardPage({
   initialAudit: Audit | null;
   initialError?: string;
 }) {
-  const [siteUrl] = useState(initialSiteUrl);
+  const [siteUrl, setSiteUrl] = useState(initialSiteUrl);
   const [audit, setAudit] = useState<Audit | null>(initialAudit);
   const [selectedIssueId, setSelectedIssueId] = useState(
     initialAudit?.issues[0]?.id ?? "",
@@ -116,6 +118,46 @@ export function DashboardPage({
   const [notice, setNotice] = useState("");
   const [scanError, setScanError] = useState(initialError ?? "");
   const [activity, setActivity] = useState(initialActivity);
+  const [webmcpStatus, setWebmcpStatus] = useState<WebMcpStatus>({
+    state: "checking",
+    registeredTools: [],
+  });
+
+  const applyAudit = useCallback(
+    (nextAudit: Audit, activityLabel: string, activityDetail: string) => {
+      setAudit(nextAudit);
+      setSiteUrl(nextAudit.siteUrl);
+      setSelectedIssueId(nextAudit.issues[0]?.id ?? "");
+      setScanError("");
+      setActivity((current) => [
+        {
+          id: "activity-" + Date.now(),
+          label: activityLabel,
+          detail: activityDetail,
+          tone: "success",
+          time: "just now",
+        },
+        ...current,
+      ]);
+    },
+    [],
+  );
+
+  const handleToolAudit = useCallback(
+    (nextAudit: Audit) => {
+      applyAudit(
+        nextAudit,
+        "Agent scan completed",
+        nextAudit.issues.length + " normalized findings are ready to inspect.",
+      );
+      setNotice("Agent scan loaded into the workspace.");
+    },
+    [applyAudit],
+  );
+
+  const handleWebMcpStatus = useCallback((status: WebMcpStatus) => {
+    setWebmcpStatus(status);
+  }, []);
 
   const selectedIssue = useMemo(
     () =>
@@ -153,20 +195,12 @@ export function DashboardPage({
         throw new Error(payload.error ?? "The audit could not be completed.");
       }
 
-      setAudit(payload.audit);
-      setSelectedIssueId(payload.audit.issues[0]?.id ?? "");
-      setActivity((current) => [
-        {
-          id: "activity-" + Date.now(),
-          label: "Audit refreshed",
-          detail:
-            payload.audit?.issues.length +
-            " normalized findings are ready to inspect.",
-          tone: "success",
-          time: "just now",
-        },
-        ...current,
-      ]);
+      applyAudit(
+        payload.audit,
+        "Audit refreshed",
+        payload.audit.issues.length +
+          " normalized findings are ready to inspect.",
+      );
       setNotice("Audit refreshed from the live target.");
     } catch (error) {
       setScanError(
@@ -178,6 +212,9 @@ export function DashboardPage({
       setIsScanning(false);
     }
   }
+
+  const webmcpStatusLabel = getWebMcpStatusLabel(webmcpStatus.state);
+  const webmcpStatusClass = getWebMcpStatusClass(webmcpStatus.state);
 
   function handleProposeFix() {
     if (!selectedIssue) {
@@ -218,6 +255,10 @@ export function DashboardPage({
 
   return (
     <main className="dashboard-page">
+      <WebMcpBridge
+        onAudit={handleToolAudit}
+        onStatus={handleWebMcpStatus}
+      />
       <aside className="dashboard-sidebar">
         <Link className="brand dashboard-brand" href="/" aria-label="Mend home">
           <span className="brand-mark">
@@ -271,16 +312,43 @@ export function DashboardPage({
               <span className="status-card-icon">
                 <Sparkle width={15} height={15} />
               </span>
-              <span className="status-pill status-pill-waiting">Preparing</span>
+              <span className={"status-pill " + webmcpStatusClass}>
+                {webmcpStatusLabel}
+              </span>
             </div>
             <strong>WebMCP control plane</strong>
             <p>
-              The audit pipeline is live. Structured tools arrive in Phase 3.
+              {webmcpStatus.message ??
+                (webmcpStatus.state === "ready"
+                  ? "Read-only audit tools are available to the active agent."
+                  : "Checking whether this browser can expose structured tools to an agent.")}
             </p>
             <div className="status-progress">
-              <span style={{ width: "50%" }} />
+              <span
+                style={{
+                  width:
+                    webmcpStatus.state === "ready"
+                      ? "75%"
+                      : webmcpStatus.state === "error"
+                        ? "25%"
+                        : "50%",
+                }}
+              />
             </div>
-            <span className="status-progress-label">Phase 2 of 4</span>
+            <span className="status-progress-label">
+              {webmcpStatus.state === "ready"
+                ? webmcpStatus.registeredTools.length + " tools registered"
+                : "Phase 3 of 4"}
+            </span>
+            {webmcpStatus.registeredTools.length > 0 ? (
+              <div className="webmcp-tool-list" aria-label="Registered WebMCP tools">
+                {webmcpStatus.registeredTools.map((toolName) => (
+                  <span className="webmcp-tool-chip" key={toolName}>
+                    {toolName}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
           <Link className="sidebar-footer-link" href="/">
             <span className="footer-logo-dot" />
@@ -758,6 +826,38 @@ function formatPage(value: string) {
   } catch {
     return value;
   }
+}
+
+function getWebMcpStatusLabel(state: WebMcpStatus["state"]) {
+  if (state === "ready") {
+    return "Ready";
+  }
+
+  if (state === "unsupported") {
+    return "Unavailable";
+  }
+
+  if (state === "error") {
+    return "Error";
+  }
+
+  return "Checking";
+}
+
+function getWebMcpStatusClass(state: WebMcpStatus["state"]) {
+  if (state === "ready") {
+    return "status-pill-ready";
+  }
+
+  if (state === "unsupported") {
+    return "status-pill-unavailable";
+  }
+
+  if (state === "error") {
+    return "status-pill-error";
+  }
+
+  return "status-pill-waiting";
 }
 
 function getProposedLine(issue: Issue) {

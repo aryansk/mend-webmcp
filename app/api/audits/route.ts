@@ -1,5 +1,10 @@
 import { getAuditErrorMessage, AuditError } from "../../../lib/audit/errors";
-import { getAudit, getLatestAudit } from "../../../lib/audit/store";
+import { compareAudits } from "../../../lib/audit/compare";
+import {
+  getAudit,
+  getAuditForIssue,
+  getLatestAudit,
+} from "../../../lib/audit/store";
 import {
   normalizeCategories,
   runAuditForUrl,
@@ -8,6 +13,56 @@ import { getAuditSummary } from "../../../lib/audit/summary";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const beforeAuditId = searchParams.get("beforeAuditId");
+  const afterAuditId = searchParams.get("afterAuditId");
+
+  if (beforeAuditId || afterAuditId) {
+    if (!beforeAuditId || !afterAuditId) {
+      return Response.json(
+        { error: "Both beforeAuditId and afterAuditId are required." },
+        { status: 400, headers: noStoreHeaders() },
+      );
+    }
+
+    const beforeAudit = getAudit(beforeAuditId);
+    const afterAudit = getAudit(afterAuditId);
+
+    if (!beforeAudit || !afterAudit) {
+      return Response.json(
+        { error: "One or both audits were not found." },
+        { status: 404, headers: noStoreHeaders() },
+      );
+    }
+
+    return Response.json(
+      { comparison: compareAudits(beforeAudit, afterAudit) },
+      { headers: noStoreHeaders() },
+    );
+  }
+
+  const issueId = searchParams.get("issueId");
+
+  if (issueId) {
+    const audit = getAuditForIssue(issueId);
+    const issue = audit?.issues.find((candidate) => candidate.id === issueId);
+
+    if (!issue) {
+      return Response.json(
+        { error: "Issue not found." },
+        { status: 404, headers: noStoreHeaders() },
+      );
+    }
+
+    return Response.json(
+      {
+        issue,
+        evidence: issue.evidence ?? null,
+        sourceHints: issue.sourceHint ? [issue.sourceHint] : [],
+      },
+      { headers: noStoreHeaders() },
+    );
+  }
+
   const auditId = searchParams.get("auditId");
   const siteUrl = searchParams.get("siteUrl");
   const audit = auditId

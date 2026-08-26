@@ -23,3 +23,9 @@ export function getLatestAudit(siteUrl: string) {
     .filter((audit) => audit.siteUrl === siteUrl)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
 }
+
+export function getAuditForIssue(issueId: string) {
+  return Array.from(audits.values()).find((audit) =>
+    audit.issues.some((issue) => issue.id === issueId),
+  );
+}

@@ -952,6 +952,21 @@ a {
   color: var(--amber);
 }
 
+.status-pill-ready {
+  background: rgba(185, 243, 107, 0.12);
+  color: var(--lime);
+}
+
+.status-pill-unavailable {
+  background: rgba(141, 150, 167, 0.13);
+  color: #b0b8c7;
+}
+
+.status-pill-error {
+  background: rgba(251, 113, 133, 0.12);
+  color: var(--red);
+}
+
 .webmcp-status-card > strong {
   color: #e5dfff;
   display: block;
@@ -985,6 +1000,24 @@ a {
   display: block;
   font-size: 9px;
   margin-top: 7px;
+}
+
+.webmcp-tool-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 11px;
+}
+
+.webmcp-tool-chip {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: #c7c1e4;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 8px;
+  line-height: 1;
+  padding: 5px 5px 4px;
 }
 
 .sidebar-footer-link {
