@@ -1,0 +1,669 @@
+"use client";
+
+import type { CSSProperties } from "react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  CheckCircle,
+  Clock,
+  Code2,
+  ExternalLink,
+  Gauge,
+  GitBranch,
+  Link2,
+  LogoMark,
+  Search,
+  ShieldCheck,
+  Sparkle,
+  X,
+} from "./icons";
+import { demoAudit } from "../lib/demo-data";
+import { getAuditSummary } from "../lib/audit/summary";
+import type { ActivityEvent, AuditCategory, Issue, ScoreKey } from "../lib/types";
+
+const scoreCards: Array<{
+  key: ScoreKey;
+  label: string;
+  detail: string;
+  color: string;
+  icon: typeof Gauge;
+}> = [
+  {
+    key: "performance",
+    label: "Performance",
+    detail: "Page speed",
+    color: "#b9f36b",
+    icon: Gauge,
+  },
+  {
+    key: "accessibility",
+    label: "Accessibility",
+    detail: "Inclusive UX",
+    color: "#a78bfa",
+    icon: ShieldCheck,
+  },
+  {
+    key: "seo",
+    label: "SEO",
+    detail: "Search readiness",
+    color: "#67e8f9",
+    icon: Search,
+  },
+];
+
+const initialActivity: ActivityEvent[] = [
+  {
+    id: "activity-1",
+    label: "Demo audit loaded",
+    detail: "6 normalized issues are ready to inspect.",
+    tone: "success",
+    time: "just now",
+  },
+  {
+    id: "activity-2",
+    label: "WebMCP layer queued",
+    detail: "Read-only tools arrive in Phase 3.",
+    tone: "neutral",
+    time: "Phase 1",
+  },
+  {
+    id: "activity-3",
+    label: "Repository disconnected",
+    detail: "Connect a repo before source mapping is live.",
+    tone: "warning",
+    time: "waiting",
+  },
+];
+
+export function DashboardPage({ initialSiteUrl }: { initialSiteUrl: string }) {
+  const [siteUrl] = useState(initialSiteUrl);
+  const [selectedIssueId, setSelectedIssueId] = useState(demoAudit.issues[0]?.id ?? "");
+  const [isScanning, setIsScanning] = useState(false);
+  const [patchVisible, setPatchVisible] = useState(false);
+  const [draftApproved, setDraftApproved] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [activity, setActivity] = useState(initialActivity);
+
+  const selectedIssue = useMemo(
+    () =>
+      demoAudit.issues.find((issue) => issue.id === selectedIssueId) ??
+      demoAudit.issues[0],
+    [selectedIssueId],
+  );
+  const summary = getAuditSummary(demoAudit);
+
+  function handleRescan() {
+    setIsScanning(true);
+    setNotice("");
+    window.setTimeout(() => {
+      setIsScanning(false);
+      setActivity((current) => [
+        {
+          id: "activity-" + Date.now(),
+          label: "Demo audit refreshed",
+          detail: "The same deterministic findings are available.",
+          tone: "success",
+          time: "just now",
+        },
+        ...current,
+      ]);
+      setNotice("Audit refreshed. Phase 2 will replace this demo data with live checks.");
+    }, 850);
+  }
+
+  function handleProposeFix() {
+    if (!selectedIssue) {
+      return;
+    }
+
+    setPatchVisible(true);
+    setDraftApproved(false);
+    setNotice("A draft proposal is ready for human review. No source was changed.");
+    setActivity((current) => [
+      {
+        id: "activity-" + Date.now(),
+        label: "Draft fix proposed",
+        detail: selectedIssue.title,
+        tone: "neutral",
+        time: "just now",
+      },
+      ...current,
+    ]);
+  }
+
+  function handleDraftApproval() {
+    setDraftApproved(true);
+    setNotice(
+      "Mock approval recorded. Applying source changes is intentionally unavailable in the Phase 1 shell.",
+    );
+    setActivity((current) => [
+      {
+        id: "activity-" + Date.now(),
+        label: "Human approval recorded",
+        detail: "The draft is approved in the demo state only.",
+        tone: "success",
+        time: "just now",
+      },
+      ...current,
+    ]);
+  }
+
+  if (!selectedIssue) {
+    return null;
+  }
+
+  return (
+    <main className="dashboard-page">
+      <aside className="dashboard-sidebar">
+        <Link className="brand dashboard-brand" href="/" aria-label="Mend home">
+          <span className="brand-mark">
+            <LogoMark width={21} height={21} />
+          </span>
+          <span>
+            <span className="brand-name">Mend</span>
+            <span className="brand-kicker">repair workspace</span>
+          </span>
+        </Link>
+
+        <div className="sidebar-section">
+          <span className="sidebar-label">Workspace</span>
+          <a className="sidebar-link active" href="#overview">
+            <Activity width={16} height={16} />
+            Overview
+            <span className="sidebar-link-count">1</span>
+          </a>
+          <a className="sidebar-link" href="#issues">
+            <AlertTriangle width={16} height={16} />
+            Issues
+            <span className="sidebar-link-count">6</span>
+          </a>
+          <a className="sidebar-link" href="#activity">
+            <Clock width={16} height={16} />
+            Activity
+          </a>
+        </div>
+
+        <div className="sidebar-section">
+          <span className="sidebar-label">Connected source</span>
+          <button
+            className="repo-card"
+            type="button"
+            onClick={() => setNotice("GitHub connection is scheduled for Phase 4.")}
+          >
+            <span className="repo-card-icon">
+              <GitBranch width={16} height={16} />
+            </span>
+            <span>
+              <strong>Repository</strong>
+              <small>Not connected</small>
+            </span>
+            <ArrowRight width={14} height={14} />
+          </button>
+        </div>
+
+        <div className="sidebar-bottom">
+          <div className="webmcp-status-card">
+            <div className="status-card-topline">
+              <span className="status-card-icon">
+                <Sparkle width={15} height={15} />
+              </span>
+              <span className="status-pill status-pill-waiting">Preparing</span>
+            </div>
+            <strong>WebMCP control plane</strong>
+            <p>
+              The UI shell is ready. Structured tools are added after the audit
+              pipeline.
+            </p>
+            <div className="status-progress">
+              <span style={{ width: "25%" }} />
+            </div>
+            <span className="status-progress-label">Phase 1 of 4</span>
+          </div>
+          <Link className="sidebar-footer-link" href="/">
+            <span className="footer-logo-dot" />
+            Back to Mend home
+          </Link>
+        </div>
+      </aside>
+
+      <section className="dashboard-content" id="overview">
+        <header className="dashboard-header">
+          <div>
+            <div className="breadcrumb">
+              <span>Workspace</span>
+              <span>/</span>
+              <strong>Overview</strong>
+            </div>
+            <div className="dashboard-title-row">
+              <h1>{formatSiteName(siteUrl)}</h1>
+              <span className="mock-badge">DEMO DATA</span>
+            </div>
+            <p className="dashboard-subtitle">
+              Last scanned just now · {summary.issueCount} issues found ·{" "}
+              {summary.highImpactIssueCount} high impact
+            </p>
+          </div>
+          <div className="dashboard-header-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => setNotice("GitHub connection is scheduled for Phase 4.")}
+            >
+              <GitBranch width={15} height={15} />
+              Connect repo
+            </button>
+            <button
+              className="primary-button compact"
+              type="button"
+              onClick={handleRescan}
+              disabled={isScanning}
+            >
+              <Activity width={15} height={15} />
+              {isScanning ? "Scanning…" : "Rescan site"}
+            </button>
+          </div>
+        </header>
+
+        {notice ? (
+          <div className="dashboard-notice" role="status">
+            <CheckCircle width={16} height={16} />
+            <span>{notice}</span>
+            <button type="button" onClick={() => setNotice("")} aria-label="Dismiss notice">
+              <X width={15} height={15} />
+            </button>
+          </div>
+        ) : null}
+
+        <div className="score-grid">
+          {scoreCards.map((card) => {
+            const Icon = card.icon;
+            const score = demoAudit.scores[card.key] ?? 0;
+            const ringStyle = {
+              "--score": score,
+              "--ring-color": card.color,
+            } as CSSProperties;
+
+            return (
+              <article className="score-card" key={card.key}>
+                <div className="score-card-heading">
+                  <span className="score-card-icon" style={{ color: card.color }}>
+                    <Icon width={17} height={17} />
+                  </span>
+                  <span>
+                    <strong>{card.label}</strong>
+                    <small>{card.detail}</small>
+                  </span>
+                  <button
+                    className="card-menu"
+                    type="button"
+                    aria-label={"More " + card.label + " options"}
+                    onClick={() =>
+                      setNotice(card.label + " trend details arrive with live audits in Phase 2.")
+                    }
+                  >
+                    ···
+                  </button>
+                </div>
+                <div className="score-card-value-row">
+                  <div className="score-ring" style={ringStyle}>
+                    <span>{score}</span>
+                  </div>
+                  <div className="score-card-trend">
+                    <span className="trend-neutral">baseline</span>
+                    <small>Needs attention</small>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+          <article className="score-card broken-links-card">
+            <div className="score-card-heading">
+              <span className="score-card-icon score-card-icon-red">
+                <Link2 width={17} height={17} />
+              </span>
+              <span>
+                <strong>Broken links</strong>
+                <small>Reachability</small>
+              </span>
+              <button
+                className="card-menu"
+                type="button"
+                aria-label="More broken links options"
+                onClick={() => setNotice("Link checks arrive with the Phase 2 audit pipeline.")}
+              >
+                ···
+              </button>
+            </div>
+            <div className="broken-link-value">
+              <strong>{demoAudit.brokenLinks}</strong>
+              <span>found</span>
+            </div>
+            <div className="broken-link-bar">
+              <span style={{ width: "58%" }} />
+            </div>
+            <small className="score-card-footnote">3 routes need review</small>
+          </article>
+        </div>
+
+        <div className="dashboard-grid">
+          <section className="issues-panel panel" id="issues">
+            <div className="panel-header">
+              <div>
+                <span className="micro-label">PRIORITIZED FINDINGS</span>
+                <h2>Issues to review</h2>
+              </div>
+              <button
+                className="filter-button"
+                type="button"
+                onClick={() => setNotice("Issue filters arrive with live audit data in Phase 2.")}
+              >
+                All issues
+                <span>⌄</span>
+              </button>
+            </div>
+            <div className="issue-list">
+              {demoAudit.issues.map((issue) => (
+                <button
+                  className={"issue-row " + (selectedIssue.id === issue.id ? "selected" : "")}
+                  key={issue.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedIssueId(issue.id);
+                    setNotice("");
+                  }}
+                >
+                  <span className={"severity-mark severity-" + issue.severity} />
+                  <span className="issue-row-copy">
+                    <span className="issue-row-title">{issue.title}</span>
+                    <span className="issue-row-meta">
+                      {formatCategory(issue.category)} · {formatPage(issue.pageUrl)}
+                    </span>
+                  </span>
+                  <span className={"severity-badge severity-badge-" + issue.severity}>
+                    {issue.severity}
+                  </span>
+                  <ArrowRight className="issue-row-arrow" width={15} height={15} />
+                </button>
+              ))}
+            </div>
+            <div className="panel-footer">
+              <span>
+                Showing {demoAudit.issues.length} of {demoAudit.issues.length} findings
+              </span>
+              <button
+                className="text-button"
+                type="button"
+                onClick={() => setNotice("Pagination is unnecessary for the Phase 1 demo dataset.")}
+              >
+                View all
+                <ArrowRight width={14} height={14} />
+              </button>
+            </div>
+          </section>
+
+          <section className="issue-detail-panel panel">
+            <div className="panel-header detail-header">
+              <div>
+                <span className="micro-label">SELECTED ISSUE</span>
+                <h2>Why this matters</h2>
+              </div>
+              <span className={"severity-badge severity-badge-" + selectedIssue.severity}>
+                {selectedIssue.severity}
+              </span>
+            </div>
+            <div className="detail-content">
+              <div className="detail-title-row">
+                <span className={"detail-category-icon category-" + selectedIssue.category}>
+                  {selectedIssue.category === "accessibility" ? (
+                    <ShieldCheck width={18} height={18} />
+                  ) : selectedIssue.category === "performance" ? (
+                    <Gauge width={18} height={18} />
+                  ) : (
+                    <Search width={18} height={18} />
+                  )}
+                </span>
+                <h3>{selectedIssue.title}</h3>
+              </div>
+              <p className="detail-description">{selectedIssue.description}</p>
+
+              <div className="detail-block">
+                <span className="detail-label">
+                  <Code2 width={14} height={14} />
+                  Evidence
+                </span>
+                <code className="evidence-block">{selectedIssue.evidence}</code>
+              </div>
+
+              <div className="detail-block source-block">
+                <span className="detail-label">
+                  <GitBranch width={14} height={14} />
+                  Source mapping
+                </span>
+                <div className="source-hint">
+                  <div>
+                    <strong>{selectedIssue.sourceHint?.filePath ?? "Source unavailable"}</strong>
+                    <span>
+                      {selectedIssue.sourceHint
+                        ? "Lines " +
+                          selectedIssue.sourceHint.lineStart +
+                          "–" +
+                          selectedIssue.sourceHint.lineEnd
+                        : "Connect a repository to inspect source"}
+                    </span>
+                  </div>
+                  {selectedIssue.sourceHint ? (
+                    <span className="confidence-badge">
+                      {Math.round(selectedIssue.sourceHint.confidence * 100)}% match
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="impact-callout">
+                <span className="impact-icon">
+                  <Sparkle width={15} height={15} />
+                </span>
+                <span>
+                  <strong>Expected impact</strong>
+                  <small>{selectedIssue.estimatedImpact}</small>
+                </span>
+              </div>
+
+              <div className="detail-actions">
+                <button
+                  className="secondary-button full-width"
+                  type="button"
+                  onClick={() => setNotice("A connected repository is required to inspect source live.")}
+                >
+                  <ExternalLink width={15} height={15} />
+                  Inspect source
+                </button>
+                <button className="primary-button full-width" type="button" onClick={handleProposeFix}>
+                  <Sparkle width={15} height={15} />
+                  Propose safe fix
+                </button>
+              </div>
+              <p className="approval-note">
+                <ShieldCheck width={14} height={14} />
+                Nothing changes until a human approves a patch.
+              </p>
+            </div>
+          </section>
+        </div>
+
+        <section className="activity-panel panel" id="activity">
+          <div className="panel-header">
+            <div>
+              <span className="micro-label">WORKSPACE LOG</span>
+              <h2>Activity</h2>
+            </div>
+            <span className="activity-live">
+              <span className="state-dot" />
+              live workspace
+            </span>
+          </div>
+          <div className="activity-list">
+            {activity.slice(0, 4).map((event) => (
+              <div className="activity-row" key={event.id}>
+                <span className={"activity-marker activity-marker-" + event.tone}>
+                  {event.tone === "success" ? (
+                    <Check width={13} height={13} />
+                  ) : event.tone === "warning" ? (
+                    <AlertTriangle width={13} height={13} />
+                  ) : (
+                    <Activity width={13} height={13} />
+                  )}
+                </span>
+                <span className="activity-copy">
+                  <strong>{event.label}</strong>
+                  <small>{event.detail}</small>
+                </span>
+                <span className="activity-time">{event.time}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </section>
+
+      {patchVisible ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setPatchVisible(false);
+            }
+          }}
+        >
+          <section
+            className="patch-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="patch-modal-title"
+          >
+            <div className="patch-modal-header">
+              <div>
+                <span className="micro-label">DRAFT ONLY · NO SOURCE MUTATION</span>
+                <h2 id="patch-modal-title">Review proposed fix</h2>
+              </div>
+              <button
+                className="modal-close"
+                type="button"
+                onClick={() => setPatchVisible(false)}
+                aria-label="Close patch preview"
+              >
+                <X width={18} height={18} />
+              </button>
+            </div>
+            <div className="patch-modal-summary">
+              <span className="patch-file-icon">
+                <Code2 width={16} height={16} />
+              </span>
+              <span>
+                <strong>{selectedIssue.sourceHint?.filePath ?? "unmapped source"}</strong>
+                <small>{selectedIssue.title}</small>
+              </span>
+              <span className="safe-badge">SAFE CHANGE</span>
+            </div>
+            <div className="diff-view">
+              <div className="diff-view-toolbar">
+                <span>Proposed diff</span>
+                <span>1 file · 1 insertion · 1 deletion</span>
+              </div>
+              <div className="diff-row diff-row-context">
+                <span> </span>
+                <code>{"<section className=\"hero\">"}</code>
+              </div>
+              <div className="diff-row diff-row-delete">
+                <span>−</span>
+                <code>{selectedIssue.evidence ?? "Existing implementation"}</code>
+              </div>
+              <div className="diff-row diff-row-add">
+                <span>+</span>
+                <code>{getProposedLine(selectedIssue)}</code>
+              </div>
+              <div className="diff-row diff-row-context">
+                <span> </span>
+                <code>{"</section>"}</code>
+              </div>
+            </div>
+            <div className="patch-modal-explanation">
+              <span className="impact-icon">
+                <Sparkle width={15} height={15} />
+              </span>
+              <p>
+                This draft addresses the selected finding without changing
+                navigation or visual layout. Phase 1 records the review state
+                only; repository writes arrive after the source integration
+                phase.
+              </p>
+            </div>
+            <div className="patch-modal-footer">
+              <button className="secondary-button" type="button" onClick={() => setPatchVisible(false)}>
+                Keep as draft
+              </button>
+              <button
+                className={"primary-button " + (draftApproved ? "button-approved" : "")}
+                type="button"
+                onClick={handleDraftApproval}
+                disabled={draftApproved}
+              >
+                {draftApproved ? <Check width={15} height={15} /> : <ShieldCheck width={15} height={15} />}
+                {draftApproved ? "Approved in demo" : "Approve draft preview"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </main>
+  );
+}
+
+function formatSiteName(value: string) {
+  try {
+    return new URL(value).hostname.replace(/^www\./, "");
+  } catch {
+    return value.replace(/^https?:\/\//, "").replace(/\/$/, "") || "Demo site";
+  }
+}
+
+function formatCategory(category: AuditCategory) {
+  return category === "seo" ? "SEO" : category.charAt(0).toUpperCase() + category.slice(1);
+}
+
+function formatPage(value: string) {
+  try {
+    const url = new URL(value);
+    return url.pathname === "/" ? "Homepage" : url.pathname;
+  } catch {
+    return value;
+  }
+}
+
+function getProposedLine(issue: Issue) {
+  if (issue.id === "issue_img_alt") {
+    return '<img src="/images/hero.webp" alt="Team reviewing a website audit" />';
+  }
+
+  if (issue.id === "issue_form_label") {
+    return '<label htmlFor="email">Email address</label>';
+  }
+
+  if (issue.id === "issue_hero_size") {
+    return '<img src="/images/hero-640.webp" width="640" height="420" alt="Hero image" />';
+  }
+
+  if (issue.id === "issue_blocking_script") {
+    return '<Script src="/analytics.js" strategy="afterInteractive" />';
+  }
+
+  if (issue.id === "issue_meta_description") {
+    return 'description: "A concise summary of the site",';
+  }
+
+  return "<h2>Feature section</h2>";
+}
