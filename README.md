@@ -5,10 +5,10 @@ a shared human and agent workflow: scan, understand, propose, approve, fix, and
 verify.
 
 The project is being built for the OpenAI WebMCP Challenge. The current
-checkpoint is Phase 4: a polished, responsive UI backed by a bounded server-side
-audit pipeline, eight feature-detected WebMCP read-only tools, and a connected
-controlled repository source viewer. Repository writes are intentionally not
-enabled yet.
+checkpoint is Phase 5: a polished, responsive UI backed by a bounded server-side
+audit pipeline, eleven feature-detected WebMCP tools, a connected controlled
+repository source viewer, and a deterministic proposed-fix review flow.
+Repository writes are intentionally not enabled yet.
 
 ## Live demo
 
@@ -23,10 +23,10 @@ diffs, approval, and verification in one workspace.
 
 WebMCP adds a structured agent control plane to the same human UI. An agent can
 call compact tools to scan a site, retrieve a summary, filter issues, inspect
-evidence, compare audits, and read mapped source context. A tool-triggered scan
-updates the visible dashboard immediately, so the agent and human operate on
-the same state. The human will still approve every source-changing action in
-later phases.
+evidence, compare audits, read mapped source context, generate an exact diff,
+and request human approval. Tool-triggered scans and fix proposals update the
+visible dashboard immediately, so the agent and human operate on the same
+state. The human still approves every source-changing action.
 
 ## Current UI
 
@@ -40,7 +40,9 @@ later phases.
   metadata, and same-origin links.
 - SSRF protections, redirect limits, response-size limits, fetch timeouts, and
   bounded resource probes.
-- Draft patch review modal that makes the approval boundary visible without
+- Deterministic patch generator for the controlled demo issues, with full
+  original/proposed source and unified diffs.
+- Patch review modal that records waiting, approved, and rejected states without
   mutating a repository.
 - Imperative WebMCP registration through `document.modelContext` with feature
   detection, abortable component lifecycle cleanup, and a visible registered
@@ -90,6 +92,10 @@ Validation commands:
       route.ts                 Controlled repository connection API
       files/route.ts            Safe file listing and reads
       source/route.ts           Issue-to-source resolution
+    app/api/fixes/
+      route.ts                 Deterministic proposal and diff API
+      approval/route.ts          Human approval request API
+      decision/route.ts          Explicit approve/reject API
     components/
       dashboard-page.tsx       Interactive audit workspace
       icons.tsx                Small inline SVG icon set
@@ -111,6 +117,12 @@ Validation commands:
         tool-schemas.ts        Compact JSON schemas and annotations
         tools.ts               Audit and repository tool implementations
         types.ts               Local WebMCP TypeScript contract
+      fixes/
+        diff.ts                Bounded unified diff generation
+        generator.ts           Controlled source patch plans
+        service.ts             Proposal and approval state helpers
+        store.ts               Lightweight in-memory fix store
+        errors.ts              Fix validation errors
       repository/
         demo.ts                Controlled repository definition
         files.ts               Bounded server-side file access
@@ -143,19 +155,23 @@ so stale tools are removed when the component unmounts.
 - get_repository_status
 - list_repository_files
 - inspect_source
+- propose_fix
+- get_fix_diff
+- request_fix_approval
 
-`scan_site` creates an in-memory audit record but does not change the target
-site, so it is explicitly annotated as non-read-only. The other seven tools are
-read-only and return bounded JSON designed for agent reasoning. The repository
-tools expose only the connected demo repository and never return credentials.
-Proposed fixes and repository writes will be separate tools. Any mutating tool
-will require an approval state recorded by the human-facing UI, and source
-changes will be branch-first rather than direct changes to main.
+`scan_site`, `propose_fix`, and `request_fix_approval` update Mend workspace
+state, so they are explicitly annotated as non-read-only. They never mutate the
+target repository. The remaining tools are read-only and return bounded JSON
+designed for agent reasoning. The repository and fix tools expose only the
+connected demo repository and never return credentials. The human-facing UI is
+the approval boundary: a decision is rejected unless the fix is already waiting
+for human review. Source changes will be branch-first rather than direct changes
+to main in the apply phase.
 
 ## Environment
 
 The environment template is .env.example. No environment variables are
-required for the Phase 4 audit pipeline, demo repository, or WebMCP tools.
+required for the Phase 5 audit pipeline, demo repository, or WebMCP tools.
 Future GitHub OAuth phases may use the following values:
 
 - NEXT_PUBLIC_APP_URL
@@ -179,11 +195,12 @@ the server, and returns no tokens to the browser. Future source writes will
 require explicit human approval and preserve a reversible branch-based change
 path.
 
-The Phase 4 server store is intentionally in-memory and suitable for the
-controlled demo only. After `scan_site`, the browser keeps the most recent 12
-audits in a bounded session cache so the same-page tool chain remains reliable
-across serverless requests. A full reload still loses non-demo audit history.
-Durable persistence will be added only if it improves the judging workflow.
+The Phase 5 server stores for audits, repositories, and proposed fixes are
+intentionally in-memory and suitable for the controlled demo only. After
+`scan_site` and `propose_fix`, the browser keeps bounded same-page caches so the
+agent can continue from the exact state visible to the human across serverless
+requests. A full reload still loses non-demo audit and fix history. Durable
+persistence will be added only if it improves the judging workflow.
 
 ## WebMCP local testing
 
@@ -198,7 +215,7 @@ Then:
 2. Open `http://localhost:3000/dashboard?site=https://demo.mend.local` in the
    WebMCP-enabled browser.
 3. Confirm the dashboard status card changes from Checking to Ready and lists
-   the eight registered tool names.
+   the eleven registered tool names.
 4. Ask the connected agent to call `scan_site` for `https://demo.mend.local`.
 5. Use the returned `auditId` with `get_audit_summary` and `list_issues`.
 6. Pass an issue ID from `list_issues` to `inspect_issue`.
@@ -206,7 +223,14 @@ Then:
    `mend/demo-site` on `main`.
 8. Ask the agent to call `get_repository_status`, `list_repository_files`, and
    `inspect_source` with `repo_demo_001` and an issue ID.
-9. Run a second scan and pass both IDs to `compare_audits`.
+9. Ask the agent to call `propose_fix` with `repo_demo_001` and
+   `issue_img_alt`, keeping the constraints about visual design and navigation.
+10. Ask the agent to call `get_fix_diff`, then `request_fix_approval` with the
+    returned fix ID.
+11. Review the exact diff in Mend and click Approve patch or Reject patch.
+    Confirm the activity log records the human decision and that no source file
+    changes.
+12. Run a second scan and pass both IDs to `compare_audits`.
 
 Browsers without WebMCP still support manual scanning and issue inspection; the
 status card reports that the agent control plane is unavailable. Final judging

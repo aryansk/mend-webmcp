@@ -1,4 +1,10 @@
-import type { Audit, AuditCategory, Issue, Severity } from "../types";
+import type {
+  Audit,
+  AuditCategory,
+  Issue,
+  ProposedFix,
+  Severity,
+} from "../types";
 import { compareAudits } from "../audit/compare";
 import { asRecord, isAbortError, requestMendApi } from "./api";
 import type {
@@ -22,6 +28,7 @@ const auditCategories: AuditCategory[] = [
 const issueSeverities: Severity[] = ["critical", "high", "medium", "low"];
 const MAX_CACHED_AUDITS = 12;
 const auditCache = new Map<string, Audit>();
+const fixCache = new Map<string, ProposedFix>();
 let repositoryCache: {
   repository: RepositoryConnection;
   files: RepositoryFile[];
@@ -29,6 +36,7 @@ let repositoryCache: {
 
 export type MendToolCallbacks = {
   onAudit: (audit: Audit) => void;
+  onFix?: (fix: ProposedFix) => void;
 };
 
 export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
@@ -242,6 +250,77 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
           };
         }),
     },
+    {
+      ...MEND_TOOL_METADATA.propose_fix,
+      execute: (input, context) =>
+        safelyExecute(context, async () => {
+          const values = readRecord(input);
+          const repositoryId = readRequiredString(values, "repositoryId");
+          const issueIds = readStringArray(
+            values.issueIds,
+            "issueIds",
+            1,
+            6,
+          );
+          const constraints = readStringArray(
+            values.constraints,
+            "constraints",
+            0,
+            4,
+          );
+          const payload = asRecord(
+            await requestMendApi("/api/fixes", {
+              body: JSON.stringify({ repositoryId, issueIds, constraints }),
+              method: "POST",
+              signal: context.signal,
+            }),
+          );
+          const fix = readFix(payload);
+
+          cacheFix(fix);
+          callbacks.onFix?.(fix);
+
+          return getFixSummary(fix);
+        }),
+    },
+    {
+      ...MEND_TOOL_METADATA.get_fix_diff,
+      execute: (input, context) =>
+        safelyExecute(context, async () => {
+          const values = readRecord(input);
+          const fixId = readRequiredString(values, "fixId");
+          const fix =
+            fixCache.get(fixId) ??
+            (await fetchFix(fixId, context.signal));
+
+          return getFixDiff(fix);
+        }),
+    },
+    {
+      ...MEND_TOOL_METADATA.request_fix_approval,
+      execute: (input, context) =>
+        safelyExecute(context, async () => {
+          const values = readRecord(input);
+          const fixId = readRequiredString(values, "fixId");
+          const payload = asRecord(
+            await requestMendApi("/api/fixes/approval", {
+              body: JSON.stringify({ fixId }),
+              method: "POST",
+              signal: context.signal,
+            }),
+          );
+          const fix = readFix(payload);
+
+          cacheFix(fix);
+          callbacks.onFix?.(fix);
+
+          return {
+            fixId: fix.id,
+            approvalStatus: fix.approvalStatus,
+            requiresHumanApproval: true,
+          };
+        }),
+    },
   ];
 }
 
@@ -251,6 +330,14 @@ export function getToolNames(tools: WebMcpTool[]) {
 
 export function clearAuditCache() {
   auditCache.clear();
+}
+
+export function cacheFix(fix: ProposedFix) {
+  fixCache.set(fix.id, fix);
+}
+
+export function clearFixCache() {
+  fixCache.clear();
 }
 
 export function cacheRepositorySnapshot(snapshot: {
@@ -321,6 +408,35 @@ function readOptionalString(value: unknown, key: string) {
   }
 
   return value.trim();
+}
+
+function readStringArray(
+  value: unknown,
+  key: string,
+  minimum: number,
+  maximum: number,
+) {
+  if (value === undefined && minimum === 0) {
+    return [];
+  }
+
+  if (
+    !Array.isArray(value) ||
+    value.length < minimum ||
+    value.length > maximum ||
+    value.some((item) => typeof item !== "string" || item.trim() === "")
+  ) {
+    throw new Error(
+      key +
+        " must contain between " +
+        minimum +
+        " and " +
+        maximum +
+        " non-empty strings.",
+    );
+  }
+
+  return Array.from(new Set(value.map((item) => (item as string).trim())));
 }
 
 function readCategories(value: unknown): AuditCategory[] | undefined {
@@ -522,6 +638,56 @@ function readSource(value: unknown): RepositorySourceView {
   }
 
   return value as RepositorySourceView;
+}
+
+function readFix(payload: Record<string, unknown>): ProposedFix {
+  const value = payload.fix;
+
+  if (!value || typeof value !== "object") {
+    throw new Error("The fix service returned no proposed fix.");
+  }
+
+  return value as ProposedFix;
+}
+
+async function fetchFix(fixId: string, signal: AbortSignal) {
+  const payload = asRecord(
+    await requestMendApi("/api/fixes?fixId=" + encodeURIComponent(fixId), {
+      signal,
+    }),
+  );
+  const fix = readFix(payload);
+
+  cacheFix(fix);
+  return fix;
+}
+
+function getFixSummary(fix: ProposedFix) {
+  return {
+    fixId: fix.id,
+    repositoryId: fix.repositoryId,
+    issueIds: fix.issueIds,
+    status: fix.status,
+    approvalStatus: fix.approvalStatus,
+    filesChanged: fix.files.length,
+    filePaths: fix.files.map((file) => file.path),
+    requiresHumanApproval: true,
+  };
+}
+
+function getFixDiff(fix: ProposedFix) {
+  return {
+    fixId: fix.id,
+    repositoryId: fix.repositoryId,
+    issueIds: fix.issueIds,
+    status: fix.status,
+    approvalStatus: fix.approvalStatus,
+    explanation: fix.explanation,
+    expectedImpact: fix.expectedImpact,
+    constraints: fix.constraints,
+    files: fix.files,
+    requiresHumanApproval: true,
+  };
 }
 
 function getCompactRepositoryStatus(snapshot: {

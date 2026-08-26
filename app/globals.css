@@ -203,6 +203,31 @@ a {
   background: #d8ffae;
 }
 
+.reject-button {
+  align-items: center;
+  background: rgba(251, 113, 133, 0.08);
+  border: 1px solid rgba(251, 113, 133, 0.26);
+  border-radius: 8px;
+  color: #fda4af;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 650;
+  gap: 7px;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.reject-button:hover:not(:disabled) {
+  background: rgba(251, 113, 133, 0.14);
+  border-color: rgba(251, 113, 133, 0.44);
+}
+
+.reject-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 /* Landing page */
 
 .landing-page {
@@ -1919,6 +1944,36 @@ a {
   padding: 11px 23px;
 }
 
+.diff-file-block + .diff-file-block {
+  border-top: 1px solid var(--line);
+  margin-top: 9px;
+  padding-top: 9px;
+}
+
+.diff-file-toolbar {
+  align-items: center;
+  color: #9da7b7;
+  display: flex;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 9px;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 9px 23px;
+}
+
+.diff-file-toolbar code {
+  color: #dce2e8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-file-toolbar span {
+  color: #6e7889;
+  flex: 0 0 auto;
+}
+
 .diff-row {
   display: grid;
   font-size: 10px;
@@ -1945,6 +2000,10 @@ a {
 
 .diff-row-context {
   color: #737d8d;
+}
+
+.diff-row-header {
+  color: #7dd3fc;
 }
 
 .patch-modal-explanation {
@@ -2489,6 +2548,7 @@ a {
   }
 
   .diff-view-toolbar,
+  .diff-file-toolbar,
   .diff-row {
     padding-left: 16px;
     padding-right: 16px;

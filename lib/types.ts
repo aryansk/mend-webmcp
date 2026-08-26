@@ -49,15 +49,29 @@ export type FilePatch = {
   original: string;
   proposed: string;
   diff: string;
+  additions: number;
+  deletions: number;
 };
+
+export type FixApprovalStatus =
+  | "not_requested"
+  | "waiting_for_human"
+  | "approved"
+  | "rejected";
 
 export type ProposedFix = {
   id: string;
+  repositoryId: string;
   issueIds: string[];
   files: FilePatch[];
   explanation: string;
   expectedImpact: string[];
+  constraints: string[];
+  createdAt: string;
   status: "proposed" | "approved" | "rejected" | "applied" | "verified";
+  approvalStatus: FixApprovalStatus;
+  approvalRequestedAt?: string;
+  decisionAt?: string;
 };
 
 export type ActivityEvent = {

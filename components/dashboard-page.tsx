@@ -36,6 +36,7 @@ import type {
   Audit,
   AuditCategory,
   Issue,
+  ProposedFix,
   ScoreKey,
 } from "../lib/types";
 
@@ -121,9 +122,12 @@ export function DashboardPage({
   );
   const [isScanning, setIsScanning] = useState(false);
   const [patchVisible, setPatchVisible] = useState(false);
-  const [draftApproved, setDraftApproved] = useState(false);
+  const [activeFix, setActiveFix] = useState<ProposedFix | null>(null);
+  const [isProposing, setIsProposing] = useState(false);
+  const [isFixDecisionPending, setIsFixDecisionPending] = useState(false);
   const [notice, setNotice] = useState("");
   const [scanError, setScanError] = useState(initialError ?? "");
+  const [fixError, setFixError] = useState("");
   const [activity, setActivity] = useState(initialActivity);
   const [repository, setRepository] = useState<RepositoryConnection | null>(null);
   const [sourceView, setSourceView] = useState<{
@@ -144,6 +148,8 @@ export function DashboardPage({
       setSelectedIssueId(nextAudit.issues[0]?.id ?? "");
       setScanError("");
       setSourceView(null);
+      setActiveFix(null);
+      setPatchVisible(false);
       setActivity((current) => [
         {
           id: "activity-" + Date.now(),
@@ -169,6 +175,34 @@ export function DashboardPage({
     },
     [applyAudit],
   );
+
+  const handleToolFix = useCallback((fix: ProposedFix) => {
+    setActiveFix(fix);
+    setPatchVisible(true);
+    setFixError("");
+    setNotice(
+      fix.approvalStatus === "waiting_for_human"
+        ? "The agent is waiting for your decision on the proposed patch."
+        : "The agent prepared a patch for human review. No source was changed.",
+    );
+    setActivity((current) => [
+      {
+        id: "activity-" + Date.now(),
+        label:
+          fix.approvalStatus === "waiting_for_human"
+            ? "Approval requested"
+            : "Fix proposal received",
+        detail:
+          fix.files.length +
+          " file" +
+          (fix.files.length === 1 ? "" : "s") +
+          " ready for review.",
+        tone: "neutral",
+        time: "just now",
+      },
+      ...current,
+    ]);
+  }, []);
 
   const handleWebMcpStatus = useCallback((status: WebMcpStatus) => {
     setWebmcpStatus(status);
@@ -343,47 +377,135 @@ export function DashboardPage({
   const webmcpStatusLabel = getWebMcpStatusLabel(webmcpStatus.state);
   const webmcpStatusClass = getWebMcpStatusClass(webmcpStatus.state);
 
-  function handleProposeFix() {
-    if (!selectedIssue) {
+  async function handleProposeFix() {
+    if (!selectedIssue || !repository) {
+      if (!repository) {
+        setNotice("Connect the controlled demo repository before proposing a fix.");
+      }
       return;
     }
 
-    setPatchVisible(true);
-    setDraftApproved(false);
-    setNotice("A draft proposal is ready for human review. No source was changed.");
-    setActivity((current) => [
-      {
-        id: "activity-" + Date.now(),
-        label: "Draft fix proposed",
-        detail: selectedIssue.title,
-        tone: "neutral",
-        time: "just now",
-      },
-      ...current,
-    ]);
+    setIsProposing(true);
+    setFixError("");
+    setNotice("");
+
+    try {
+      const response = await fetch("/api/fixes", {
+        body: JSON.stringify({
+          repositoryId: repository.id,
+          issueIds: [selectedIssue.id],
+          constraints: ["do not change visual design", "do not change navigation"],
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json()) as {
+        fix?: ProposedFix;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.fix) {
+        throw new Error(payload.error ?? "The proposed fix could not be generated.");
+      }
+
+      const approvalResponse = await fetch("/api/fixes/approval", {
+        body: JSON.stringify({ fixId: payload.fix.id }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const approvalPayload = (await approvalResponse.json()) as {
+        fix?: ProposedFix;
+        error?: string;
+      };
+
+      if (!approvalResponse.ok || !approvalPayload.fix) {
+        throw new Error(
+          approvalPayload.error ?? "The proposed fix could not be sent for approval.",
+        );
+      }
+
+      setActiveFix(approvalPayload.fix);
+      setPatchVisible(true);
+      setNotice("A patch is ready. Review it and make the approval decision.");
+      setActivity((current) => [
+        {
+          id: "activity-" + Date.now(),
+          label: "Approval requested",
+          detail: selectedIssue.title,
+          tone: "neutral",
+          time: "just now",
+        },
+        ...current,
+      ]);
+    } catch (error) {
+      setFixError(
+        error instanceof Error
+          ? error.message
+          : "The proposed fix could not be generated.",
+      );
+    } finally {
+      setIsProposing(false);
+    }
   }
 
-  function handleDraftApproval() {
-    setDraftApproved(true);
-    setNotice(
-      "Mock approval recorded. Applying source changes remains gated for the proposed-fix phase.",
-    );
-    setActivity((current) => [
-      {
-        id: "activity-" + Date.now(),
-        label: "Human approval recorded",
-        detail: "The draft is approved in the demo state only.",
-        tone: "success",
-        time: "just now",
-      },
-      ...current,
-    ]);
+  async function handleDraftDecision(decision: "approved" | "rejected") {
+    if (!activeFix || activeFix.approvalStatus !== "waiting_for_human") {
+      return;
+    }
+
+    setIsFixDecisionPending(true);
+    setFixError("");
+
+    try {
+      const response = await fetch("/api/fixes/decision", {
+        body: JSON.stringify({ decision, fixId: activeFix.id }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const payload = (await response.json()) as {
+        fix?: ProposedFix;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.fix) {
+        throw new Error(payload.error ?? "The approval decision could not be recorded.");
+      }
+
+      setActiveFix(payload.fix);
+      setNotice(
+        decision === "approved"
+          ? "Human approval recorded. No source changed; applying arrives in Phase 6."
+          : "Patch rejected. No source changed.",
+      );
+      setActivity((current) => [
+        {
+          id: "activity-" + Date.now(),
+          label: decision === "approved" ? "Human approval recorded" : "Patch rejected",
+          detail:
+            decision === "approved"
+              ? "The patch is approved but still cannot mutate source."
+              : "The proposed source change was discarded.",
+          tone: decision === "approved" ? "success" : "warning",
+          time: "just now",
+        },
+        ...current,
+      ]);
+    } catch (error) {
+      setFixError(
+        error instanceof Error
+          ? error.message
+          : "The approval decision could not be recorded.",
+      );
+    } finally {
+      setIsFixDecisionPending(false);
+    }
   }
 
   return (
     <main className="dashboard-page">
       <WebMcpBridge
         onAudit={handleToolAudit}
+        onFix={handleToolFix}
         onStatus={handleWebMcpStatus}
       />
       <aside className="dashboard-sidebar">
@@ -454,7 +576,7 @@ export function DashboardPage({
             <p>
               {webmcpStatus.message ??
                 (webmcpStatus.state === "ready"
-                  ? "Read-only audit tools are available to the active agent."
+                  ? "Audit, source, and human-review tools are available to the active agent."
                   : "Checking whether this browser can expose structured tools to an agent.")}
             </p>
             <div className="status-progress">
@@ -471,8 +593,8 @@ export function DashboardPage({
             </div>
             <span className="status-progress-label">
               {webmcpStatus.state === "ready"
-                ? webmcpStatus.registeredTools.length + " tools registered"
-                : "Phase 4 of 4"}
+                  ? webmcpStatus.registeredTools.length + " tools registered"
+                : "Phase 5 of 8"}
             </span>
             {webmcpStatus.registeredTools.length > 0 ? (
               <div className="webmcp-tool-list" aria-label="Registered WebMCP tools">
@@ -573,6 +695,20 @@ export function DashboardPage({
               type="button"
               onClick={() => setSourceError("")}
               aria-label="Dismiss source error"
+            >
+              <X width={15} height={15} />
+            </button>
+          </div>
+        ) : null}
+
+        {fixError ? (
+          <div className="dashboard-notice dashboard-notice-error" role="alert">
+            <AlertTriangle width={16} height={16} />
+            <span>{fixError}</span>
+            <button
+              type="button"
+              onClick={() => setFixError("")}
+              aria-label="Dismiss fix error"
             >
               <X width={15} height={15} />
             </button>
@@ -693,6 +829,8 @@ export function DashboardPage({
                     type="button"
                     onClick={() => {
                       setSelectedIssueId(issue.id);
+                      setActiveFix(null);
+                      setPatchVisible(false);
                       setNotice("");
                     }}
                   >
@@ -819,9 +957,18 @@ export function DashboardPage({
                   <ExternalLink width={15} height={15} />
                   {repository ? "Inspect source" : "Connect source first"}
                 </button>
-                <button className="primary-button full-width" type="button" onClick={handleProposeFix}>
+                <button
+                  className="primary-button full-width"
+                  type="button"
+                  onClick={handleProposeFix}
+                  disabled={!repository || isProposing}
+                >
                   <Sparkle width={15} height={15} />
-                  Propose safe fix
+                  {isProposing
+                    ? "Preparing fix…"
+                    : repository
+                      ? "Propose safe fix"
+                      : "Connect source to propose"}
                 </button>
               </div>
               <p className="approval-note">
@@ -884,7 +1031,9 @@ export function DashboardPage({
           >
             <div className="patch-modal-header">
               <div>
-                <span className="micro-label">DRAFT ONLY · NO SOURCE MUTATION</span>
+                <span className="micro-label">
+                  {activeFix ? getApprovalLabel(activeFix.approvalStatus) : "DRAFT ONLY"}
+                </span>
                 <h2 id="patch-modal-title">Review proposed fix</h2>
               </div>
               <button
@@ -901,55 +1050,113 @@ export function DashboardPage({
                 <Code2 width={16} height={16} />
               </span>
               <span>
-                <strong>{displayIssue.sourceHint?.filePath ?? "unmapped source"}</strong>
-                <small>{displayIssue.title}</small>
+                <strong>
+                  {activeFix
+                    ? activeFix.files.map((file) => file.path).join(", ")
+                    : "unmapped source"}
+                </strong>
+                <small>
+                  {activeFix
+                    ? activeFix.issueIds.length +
+                      " mapped issue" +
+                      (activeFix.issueIds.length === 1 ? "" : "s")
+                    : displayIssue.title}
+                </small>
               </span>
-              <span className="safe-badge">SAFE CHANGE</span>
+              <span className="safe-badge">
+                {activeFix ? getFixApprovalShortLabel(activeFix.approvalStatus) : "DRAFT"}
+              </span>
             </div>
             <div className="diff-view">
               <div className="diff-view-toolbar">
-                <span>Proposed diff</span>
-                <span>1 file · 1 insertion · 1 deletion</span>
+                <span>Exact proposed diff</span>
+                <span>{activeFix ? formatFixStats(activeFix) : "Preparing…"}</span>
               </div>
-              <div className="diff-row diff-row-context">
-                <span> </span>
-                <code>{"<section className=\"hero\">"}</code>
-              </div>
-              <div className="diff-row diff-row-delete">
-                <span>−</span>
-                <code>{displayIssue.evidence ?? "Existing implementation"}</code>
-              </div>
-              <div className="diff-row diff-row-add">
-                <span>+</span>
-                <code>{getProposedLine(displayIssue)}</code>
-              </div>
-              <div className="diff-row diff-row-context">
-                <span> </span>
-                <code>{"</section>"}</code>
-              </div>
+              {activeFix?.files.map((file) => (
+                <div className="diff-file-block" key={file.path}>
+                  <div className="diff-file-toolbar">
+                    <code>{file.path}</code>
+                    <span>
+                      {file.additions} insertion{file.additions === 1 ? "" : "s"} · {file.deletions} deletion
+                      {file.deletions === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  {file.diff.split("\n").map((line, index) => {
+                    const isAddition = line.startsWith("+") && !line.startsWith("+++");
+                    const isDeletion = line.startsWith("-") && !line.startsWith("---");
+                    const isHeader = line.startsWith("@@") || line.startsWith("---") || line.startsWith("+++");
+                    const rowClass = isAddition
+                      ? "diff-row diff-row-add"
+                      : isDeletion
+                        ? "diff-row diff-row-delete"
+                        : isHeader
+                          ? "diff-row diff-row-header"
+                          : "diff-row diff-row-context";
+                    const marker = isAddition ? "+" : isDeletion ? "−" : " ";
+                    const content = isAddition || isDeletion ? line.slice(1) : line;
+
+                    return (
+                      <div className={rowClass} key={file.path + "-" + index}>
+                        <span>{marker}</span>
+                        <code>{content}</code>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
             <div className="patch-modal-explanation">
               <span className="impact-icon">
                 <Sparkle width={15} height={15} />
               </span>
               <p>
-                This draft addresses the selected finding without changing
-                navigation or visual layout. Phase 4 keeps the connected source
-                read-only; repository writes arrive after the approval phase.
+                {activeFix?.explanation ??
+                  "This patch will be shown here before any source-changing action."} {" "}
+                {activeFix?.constraints.length
+                  ? "Constraints: " + activeFix.constraints.join(" · ") + "."
+                  : "Source writes remain disabled until the next phase."}
               </p>
             </div>
             <div className="patch-modal-footer">
-              <button className="secondary-button" type="button" onClick={() => setPatchVisible(false)}>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setPatchVisible(false)}
+              >
                 Keep as draft
               </button>
               <button
-                className={"primary-button " + (draftApproved ? "button-approved" : "")}
+                className="reject-button"
                 type="button"
-                onClick={handleDraftApproval}
-                disabled={draftApproved}
+                onClick={() => handleDraftDecision("rejected")}
+                disabled={
+                  !activeFix ||
+                  activeFix.approvalStatus !== "waiting_for_human" ||
+                  isFixDecisionPending
+                }
               >
-                {draftApproved ? <Check width={15} height={15} /> : <ShieldCheck width={15} height={15} />}
-                {draftApproved ? "Approved in demo" : "Approve draft preview"}
+                <X width={15} height={15} />
+                {activeFix?.approvalStatus === "rejected" ? "Rejected" : "Reject patch"}
+              </button>
+              <button
+                className={
+                  "primary-button " +
+                  (activeFix?.approvalStatus === "approved" ? "button-approved" : "")
+                }
+                type="button"
+                onClick={() => handleDraftDecision("approved")}
+                disabled={
+                  !activeFix ||
+                  activeFix.approvalStatus !== "waiting_for_human" ||
+                  isFixDecisionPending
+                }
+              >
+                {activeFix?.approvalStatus === "approved" ? (
+                  <Check width={15} height={15} />
+                ) : (
+                  <ShieldCheck width={15} height={15} />
+                )}
+                {activeFix?.approvalStatus === "approved" ? "Approved" : "Approve patch"}
               </button>
             </div>
           </section>
@@ -1020,28 +1227,45 @@ function getWebMcpStatusClass(state: WebMcpStatus["state"]) {
   return "status-pill-waiting";
 }
 
-function getProposedLine(issue: Issue) {
-  const title = issue.title.toLowerCase();
-
-  if (issue.id === "issue_img_alt" || title.includes("alternative text")) {
-    return '<img src="/images/hero.webp" alt="Team reviewing a website audit" />';
+function getApprovalLabel(status: ProposedFix["approvalStatus"]) {
+  if (status === "waiting_for_human") {
+    return "AWAITING HUMAN APPROVAL · NO SOURCE MUTATION";
   }
 
-  if (issue.id === "issue_form_label" || title.includes("associated label")) {
-    return '<label htmlFor="email">Email address</label>';
+  if (status === "approved") {
+    return "APPROVED BY HUMAN · NO SOURCE MUTATION";
   }
 
-  if (issue.id === "issue_hero_size" || title.includes("rendered need")) {
-    return '<img src="/images/hero-640.webp" width="640" height="420" alt="Hero image" />';
+  if (status === "rejected") {
+    return "REJECTED BY HUMAN · NO SOURCE MUTATION";
   }
 
-  if (issue.id === "issue_blocking_script" || title.includes("render-blocking")) {
-    return '<Script src="/analytics.js" strategy="afterInteractive" />';
+  return "DRAFT ONLY · NO SOURCE MUTATION";
+}
+
+function getFixApprovalShortLabel(status: ProposedFix["approvalStatus"]) {
+  if (status === "waiting_for_human") {
+    return "AWAITING APPROVAL";
   }
 
-  if (issue.id === "issue_meta_description" || title.includes("meta description")) {
-    return 'description: "A concise summary of the site",';
-  }
+  return status.toUpperCase().replaceAll("_", " ");
+}
 
-  return "<h2>Feature section</h2>";
+function formatFixStats(fix: ProposedFix) {
+  const additions = fix.files.reduce((total, file) => total + file.additions, 0);
+  const deletions = fix.files.reduce((total, file) => total + file.deletions, 0);
+
+  return (
+    fix.files.length +
+    " file" +
+    (fix.files.length === 1 ? "" : "s") +
+    " · " +
+    additions +
+    " insertion" +
+    (additions === 1 ? "" : "s") +
+    " · " +
+    deletions +
+    " deletion" +
+    (deletions === 1 ? "" : "s")
+  );
 }

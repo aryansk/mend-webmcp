@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { demoAudit } from "../../lib/demo-data";
 import {
   clearAuditCache,
+  clearFixCache,
   cacheRepositorySnapshot,
   clearRepositoryCache,
   createMendTools,
@@ -20,6 +21,7 @@ const toolContext = {
 
 afterEach(() => {
   clearAuditCache();
+  clearFixCache();
   clearRepositoryCache();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -52,6 +54,11 @@ describe("Mend WebMCP tools", () => {
       true,
     );
     expect(MEND_TOOL_METADATA.inspect_source.annotations.readOnlyHint).toBe(true);
+    expect(MEND_TOOL_METADATA.propose_fix.annotations.readOnlyHint).toBe(false);
+    expect(MEND_TOOL_METADATA.get_fix_diff.annotations.readOnlyHint).toBe(true);
+    expect(MEND_TOOL_METADATA.request_fix_approval.annotations.readOnlyHint).toBe(
+      false,
+    );
   });
 
   it("returns a compact scan result and synchronizes the UI callback", async () => {
@@ -192,6 +199,71 @@ describe("Mend WebMCP tools", () => {
       returned: 2,
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("proposes a diff, requests approval, and synchronizes the UI callback", async () => {
+    const fix = {
+      fixId: "fix_demo_issue_img_alt_test",
+      id: "fix_demo_issue_img_alt_test",
+      repositoryId: "repo_demo_001",
+      issueIds: ["issue_img_alt"],
+      status: "proposed",
+      approvalStatus: "not_requested",
+      explanation: "A bounded demo patch.",
+      expectedImpact: ["Improves accessible naming."],
+      constraints: ["do not change visual design"],
+      files: [
+        {
+          path: "components/Hero.tsx",
+          original: 'alt=""',
+          proposed: 'alt="Hero"',
+          diff: '-alt=""\n+alt="Hero"',
+          additions: 1,
+          deletions: 1,
+        },
+      ],
+      requiresHumanApproval: true,
+    };
+    const approvedFix = {
+      ...fix,
+      status: "proposed",
+      approvalStatus: "waiting_for_human",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ fix }))
+      .mockResolvedValueOnce(Response.json({ fix: approvedFix }));
+    vi.stubGlobal("fetch", fetchMock);
+    const onFix = vi.fn();
+    const tools = createMendTools({ onAudit: vi.fn(), onFix });
+    const proposeTool = tools.find((tool) => tool.name === "propose_fix");
+    const diffTool = tools.find((tool) => tool.name === "get_fix_diff");
+    const approvalTool = tools.find((tool) => tool.name === "request_fix_approval");
+
+    const proposal = await proposeTool?.execute(
+      {
+        repositoryId: "repo_demo_001",
+        issueIds: ["issue_img_alt"],
+        constraints: ["do not change visual design"],
+      },
+      toolContext,
+    );
+    const diff = await diffTool?.execute({ fixId: fix.id }, toolContext);
+    const approval = await approvalTool?.execute({ fixId: fix.id }, toolContext);
+
+    expect(proposal).toMatchObject({
+      fixId: fix.id,
+      filesChanged: 1,
+      requiresHumanApproval: true,
+    });
+    expect(diff).toHaveProperty("files.0.diff", fix.files[0].diff);
+    expect(approval).toMatchObject({
+      fixId: fix.id,
+      approvalStatus: "waiting_for_human",
+    });
+    expect(onFix).toHaveBeenNthCalledWith(1, fix);
+    expect(onFix).toHaveBeenNthCalledWith(2, approvedFix);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("registers every tool and aborts the registration signal on cleanup", async () => {

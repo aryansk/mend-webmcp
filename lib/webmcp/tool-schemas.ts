@@ -10,6 +10,9 @@ export const MEND_TOOL_NAMES = [
   "get_repository_status",
   "list_repository_files",
   "inspect_source",
+  "propose_fix",
+  "get_fix_diff",
+  "request_fix_approval",
 ] as const;
 
 export type MendToolName = (typeof MEND_TOOL_NAMES)[number];
@@ -248,6 +251,82 @@ export const MEND_TOOL_METADATA: Record<MendToolName, MendToolMetadata> = {
     },
     annotations: {
       readOnlyHint: true,
+      untrustedContentHint: true,
+    },
+  },
+  propose_fix: {
+    name: "propose_fix",
+    title: "Propose a safe source fix",
+    description:
+      "Generate a bounded candidate patch for one or more mapped demo-repository issues without changing source; use this when the human is ready to review a concrete fix.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repositoryId: {
+          type: "string",
+          description: "The connected repository identifier.",
+        },
+        issueIds: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 1,
+          maxItems: 6,
+          description: "Mapped issue identifiers to include in the proposal.",
+        },
+        constraints: {
+          type: "array",
+          items: { type: "string" },
+          maxItems: 4,
+          description: "Optional safety constraints such as preserving navigation.",
+        },
+      },
+      required: ["repositoryId", "issueIds"],
+      additionalProperties: false,
+    },
+    annotations: {
+      readOnlyHint: false,
+      untrustedContentHint: true,
+    },
+  },
+  get_fix_diff: {
+    name: "get_fix_diff",
+    title: "Get proposed fix diff",
+    description:
+      "Read the exact original and proposed source diff for a Mend fix before asking the human to approve it; this tool never applies the patch.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fixId: {
+          type: "string",
+          description: "The proposal identifier returned by propose_fix.",
+        },
+      },
+      required: ["fixId"],
+      additionalProperties: false,
+    },
+    annotations: {
+      readOnlyHint: true,
+      untrustedContentHint: true,
+    },
+  },
+  request_fix_approval: {
+    name: "request_fix_approval",
+    title: "Request human fix approval",
+    description:
+      "Surface a proposed source patch in Mend and mark it as waiting for a human decision; this does not approve or apply the patch.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fixId: {
+          type: "string",
+          description: "The proposal identifier to surface for review.",
+        },
+      },
+      required: ["fixId"],
+      additionalProperties: false,
+    },
+    annotations: {
+      readOnlyHint: false,
       untrustedContentHint: true,
     },
   },

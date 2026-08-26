@@ -104,7 +104,7 @@ export function SourceViewer({
         </div>
 
         <div className="source-viewer-footer">
-          <span>Source changes remain unavailable until the approval phase.</span>
+          <span>Source changes remain unavailable until the apply phase.</span>
           <button className="secondary-button" type="button" onClick={onClose}>
             Close viewer
           </button>
