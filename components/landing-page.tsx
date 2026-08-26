@@ -21,24 +21,108 @@ const workflow = [
     title: "Scan",
     detail: "Surface the issues that matter most.",
     state: "complete",
+    action: "Open",
+    preview: {
+      label: "audit signals",
+      badge: "5 FINDINGS",
+      title: "Start with the highest-impact findings.",
+      detail: "Mend groups the evidence so the next action is obvious.",
+      lines: [
+        {
+          prefix: "#",
+          tone: "context",
+          text: "5 normalized findings ready to inspect",
+        },
+        {
+          prefix: "+",
+          tone: "added",
+          text: "3 high-impact accessibility + performance",
+        },
+      ],
+      footer: "Performance 61 · Accessibility 74",
+      footerBadge: "inspect issues",
+    },
   },
   {
     number: "02",
     title: "Understand",
     detail: "Trace evidence back to the source.",
     state: "complete",
+    action: "Map",
+    preview: {
+      label: "source mapping",
+      badge: "94% MATCH",
+      title: "Connect each finding to the source.",
+      detail: "Evidence and file hints stay visible before a patch is proposed.",
+      lines: [
+        {
+          prefix: "↳",
+          tone: "context",
+          text: "components/Hero.tsx",
+        },
+        {
+          prefix: "+",
+          tone: "added",
+          text: "line 18 · hero image · alt attribute",
+        },
+      ],
+      footer: "evidence + source hint linked",
+      footerBadge: "mapped",
+    },
   },
   {
     number: "03",
     title: "Approve",
     detail: "Review every change before it lands.",
     state: "active",
+    action: "Review",
+    preview: {
+      label: "proposed patch",
+      badge: "SAFE CHANGE",
+      title: "Review the exact change before it lands.",
+      detail: "The agent prepares a bounded diff, then waits for your decision.",
+      lines: [
+        {
+          prefix: "−",
+          tone: "muted",
+          text: '<img src="/hero.webp" alt="" />',
+        },
+        {
+          prefix: "+",
+          tone: "added",
+          text: '<img src="/hero.webp" alt="Team reviewing a site" />',
+        },
+      ],
+      footer: "1 file · navigation unchanged",
+      footerBadge: "awaiting approval",
+    },
   },
   {
     number: "04",
     title: "Verify",
     detail: "Prove the fix improved the site.",
     state: "pending",
+    action: "Compare",
+    preview: {
+      label: "before / after",
+      badge: "PASSED",
+      title: "Prove the repair improved the site.",
+      detail: "Mend replays the checks and calls out regressions clearly.",
+      lines: [
+        {
+          prefix: "→",
+          tone: "context",
+          text: "Accessibility 74 → 83",
+        },
+        {
+          prefix: "+",
+          tone: "added",
+          text: "0 regressions detected",
+        },
+      ],
+      footer: "controlled branch snapshot replay",
+      footerBadge: "verified",
+    },
   },
 ];
 
@@ -47,6 +131,10 @@ export function LandingPage() {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [selectedWorkflowStep, setSelectedWorkflowStep] = useState("03");
+
+  const selectedWorkflow =
+    workflow.find((step) => step.number === selectedWorkflowStep) ?? workflow[2];
 
   function handleScan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -200,54 +288,72 @@ export function LandingPage() {
               </div>
               <span className="mock-badge">MOCK DATA</span>
             </div>
-            <div className="workflow-list">
-              {workflow.map((step) => (
-                <div className={"workflow-step " + step.state} key={step.number}>
-                  <span className="workflow-number">{step.number}</span>
-                  <span className="workflow-step-copy">
-                    <strong>{step.title}</strong>
-                    <small>{step.detail}</small>
-                  </span>
-                  <span className="workflow-status">
-                    {step.state === "complete" ? (
-                      <Check width={13} height={13} />
-                    ) : step.state === "active" ? (
-                      <span className="active-status">Review</span>
-                    ) : (
-                      <span className="pending-status">Queued</span>
-                    )}
-                  </span>
-                </div>
-              ))}
+            <div className="workflow-list" aria-label="Interactive repair workflow">
+              {workflow.map((step) => {
+                const isSelected = selectedWorkflowStep === step.number;
+
+                return (
+                  <button
+                    aria-pressed={isSelected}
+                    className={
+                      "workflow-step " +
+                      (isSelected
+                        ? "selected"
+                        : step.state === "active"
+                          ? "pending"
+                          : step.state)
+                    }
+                    key={step.number}
+                    onClick={() => setSelectedWorkflowStep(step.number)}
+                    type="button"
+                  >
+                    <span className="workflow-number">{step.number}</span>
+                    <span className="workflow-step-copy">
+                      <strong>{step.title}</strong>
+                      <small>{step.detail}</small>
+                    </span>
+                    <span className="workflow-status">
+                      {isSelected ? (
+                        <span className="active-status">{step.action}</span>
+                      ) : step.state === "complete" ? (
+                        <Check width={16} height={16} />
+                      ) : step.state === "active" ? (
+                        <span className="pending-status">Next</span>
+                      ) : (
+                        <span className="pending-status">Queued</span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-            <div className="preview-diff">
+            <div className="preview-diff" aria-live="polite">
               <div className="preview-diff-head">
                 <span>
                   <CodeGlyph />
-                  proposed patch
+                  {selectedWorkflow.preview.label}
                 </span>
-                <span className="safe-badge">SAFE CHANGE</span>
+                <span className="safe-badge">{selectedWorkflow.preview.badge}</span>
               </div>
-              <div className="code-line code-line-muted">
-                <span>−</span>
-                <code>&lt;img src=&quot;/hero.webp&quot; alt=&quot;&quot; /&gt;</code>
+              <div className="preview-focus">
+                <strong>{selectedWorkflow.preview.title}</strong>
+                <span>{selectedWorkflow.preview.detail}</span>
               </div>
-              <div className="code-line code-line-added">
-                <span>+</span>
-                <code>
-                  &lt;img src=&quot;/hero.webp&quot; alt=&quot;Team reviewing a
-                  site&quot; /&gt;
-                </code>
-              </div>
+              {selectedWorkflow.preview.lines.map((line) => (
+                <div className={"code-line code-line-" + line.tone} key={line.text}>
+                  <span>{line.prefix}</span>
+                  <code>{line.text}</code>
+                </div>
+              ))}
               <div className="diff-footer">
-                <span>1 file · navigation unchanged</span>
-                <span className="approval-pill">awaiting approval</span>
+                <span>{selectedWorkflow.preview.footer}</span>
+                <span className="approval-pill">{selectedWorkflow.preview.footerBadge}</span>
               </div>
             </div>
           </div>
           <div className="visual-caption">
             <Gauge width={15} height={15} />
-            <span>Agent-ready tools. Developer-readable state.</span>
+            <span>Click a stage to explore the agent control plane.</span>
           </div>
         </div>
       </section>
