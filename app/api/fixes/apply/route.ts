@@ -1,6 +1,11 @@
 import { applyApprovedFix } from "../../../../lib/fixes/apply";
 import { getFixErrorMessage, FixError } from "../../../../lib/fixes/errors";
 import { getFixDiffPayload } from "../../../../lib/fixes/service";
+import {
+  createWorkspaceReceipt,
+  requestHasWorkspaceReceipt,
+  serializeWorkspaceReceiptCookie,
+} from "../../../../lib/workspace/receipts";
 
 export async function POST(request: Request) {
   let body: { fixId?: unknown };
@@ -22,10 +27,26 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await applyApprovedFix(body.fixId.trim());
+    const fixId = body.fixId.trim();
+    const approvedByReceipt = requestHasWorkspaceReceipt(
+      request,
+      "approval",
+      fixId,
+    );
+    const result = await applyApprovedFix(fixId, approvedByReceipt);
 
     if (!result.fix) {
       throw new FixError("The proposed fix was not found.", "fix_not_found", 404);
+    }
+
+    const appliedReceipt = createWorkspaceReceipt("applied", fixId);
+    const headers: Record<string, string> = noStoreHeaders();
+
+    if (appliedReceipt) {
+      headers["Set-Cookie"] = serializeWorkspaceReceiptCookie(
+        "applied",
+        appliedReceipt,
+      );
     }
 
     return Response.json(
@@ -35,7 +56,7 @@ export async function POST(request: Request) {
         branch: result.branch,
         sourceMutation: false,
       },
-      { headers: noStoreHeaders() },
+      { headers },
     );
   } catch (error) {
     return Response.json(

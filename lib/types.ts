@@ -42,6 +42,10 @@ export type Audit = {
   responseBytes?: number;
   responseTimeMs?: number;
   checkedLinks?: number;
+  scanMode?: "demo" | "static_html" | "lighthouse_mobile";
+  scanProvider?: "mend" | "google_pagespeed";
+  lighthouseVersion?: string;
+  scanWarning?: string;
 };
 
 export type FilePatch = {
@@ -87,7 +91,7 @@ export type VerificationResult = {
   fixId: string;
   repositoryId: string;
   branchName: string;
-  mode: "controlled_snapshot";
+  mode: "source_snapshot";
   previewUrl: string | null;
   verified: boolean;
   verifiedAt: string;

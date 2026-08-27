@@ -21,5 +21,9 @@ export function getAuditSummary(audit: Audit) {
     highImpactIssueCount: countHighImpactIssues(audit.issues),
     scores: audit.scores,
     brokenLinks: audit.brokenLinks,
+    checkedLinks: audit.checkedLinks ?? 0,
+    scanMode: audit.scanMode ?? "static_html",
+    scanProvider: audit.scanProvider ?? "mend",
+    scanWarning: audit.scanWarning ?? null,
   };
 }

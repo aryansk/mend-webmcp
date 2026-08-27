@@ -218,4 +218,64 @@ describe("fix proposal and approval APIs", () => {
     expect(repeatResponse.status).toBe(200);
     expect(repeatPayload.branch?.commitSha).toBe(applyPayload.branch?.commitSha);
   });
+
+  it("restores an approved demo fix from a signed HttpOnly receipt", async () => {
+    const proposalResponse = await proposeFix(
+      new Request("http://localhost/api/fixes", {
+        method: "POST",
+        body: JSON.stringify({
+          repositoryId: "repo_demo_001",
+          issueIds: ["issue_img_alt"],
+        }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const proposal = (await proposalResponse.json()) as { fix: { id: string } };
+
+    await requestApproval(
+      new Request("http://localhost/api/fixes/approval", {
+        method: "POST",
+        body: JSON.stringify({ fixId: proposal.fix.id }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const decisionResponse = await decideFix(
+      new Request("http://localhost/api/fixes/decision", {
+        method: "POST",
+        body: JSON.stringify({ fixId: proposal.fix.id, decision: "approved" }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const approvalCookie = decisionResponse.headers
+      .get("set-cookie")
+      ?.split(";")[0];
+
+    clearFixStore();
+    clearDemoBranchStore();
+
+    const applyResponse = await applyFix(
+      new Request("http://localhost/api/fixes/apply", {
+        method: "POST",
+        body: JSON.stringify({ fixId: proposal.fix.id }),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: approvalCookie ?? "",
+        },
+      }),
+    );
+    const payload = (await applyResponse.json()) as {
+      applied?: boolean;
+      fix?: { approvalStatus?: string };
+    };
+
+    expect(approvalCookie).toContain("mend_approval_receipt=");
+    expect(applyResponse.status).toBe(200);
+    expect(payload).toMatchObject({
+      applied: true,
+      fix: { approvalStatus: "approved" },
+    });
+    expect(applyResponse.headers.get("set-cookie")).toContain(
+      "mend_applied_receipt=",
+    );
+  });
 });

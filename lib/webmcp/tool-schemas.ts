@@ -82,7 +82,7 @@ export const MEND_TOOL_METADATA: Record<MendToolName, MendToolMetadata> = {
     name: "get_audit_summary",
     title: "Get an audit summary",
     description:
-      "Retrieve compact scores and high-impact counts for a completed Mend audit when you need the current state without loading every issue.",
+      "Retrieve compact scores, scan methodology, link coverage, warnings, and high-impact counts for a completed Mend audit when you need the current state without loading every issue.",
     inputSchema: {
       type: "object",
       properties: {

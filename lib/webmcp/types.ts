@@ -29,7 +29,7 @@ export type WebMcpTool = {
   };
   execute: (
     input: unknown,
-    context: WebMcpExecuteContext,
+    context?: WebMcpExecuteContext,
   ) => Promise<unknown>;
 };
 

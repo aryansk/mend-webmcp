@@ -21,6 +21,10 @@ describe("audit summary helpers", () => {
       issueCount: 6,
       highImpactIssueCount: 3,
       brokenLinks: 3,
+      checkedLinks: 12,
+      scanMode: "demo",
+      scanProvider: "mend",
+      scanWarning: null,
     });
   });
 });

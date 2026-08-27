@@ -95,6 +95,9 @@ describe("Mend WebMCP tools", () => {
       auditId: demoAudit.id,
       issueCount: 6,
       highImpactIssueCount: 3,
+      scanMode: "demo",
+      scanProvider: "mend",
+      scanWarning: null,
     });
     expect(result).not.toHaveProperty("issues");
     expect(onAudit).toHaveBeenCalledWith(demoAudit);
@@ -102,6 +105,26 @@ describe("Mend WebMCP tools", () => {
       "/api/audits",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("supports WebMCP runtimes that omit the optional execution context", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(Response.json({ audit: demoAudit })),
+    );
+    const summaryTool = createMendTools({ onAudit: vi.fn() }).find(
+      (tool) => tool.name === "get_audit_summary",
+    );
+
+    const result = await summaryTool?.execute({ auditId: demoAudit.id });
+
+    expect(result).toMatchObject({
+      auditId: demoAudit.id,
+      issueCount: demoAudit.issues.length,
+      checkedLinks: 12,
+      scanMode: "demo",
+      scanProvider: "mend",
+    });
   });
 
   it("filters list_issues and reports invalid input without throwing", async () => {
@@ -345,7 +368,7 @@ describe("Mend WebMCP tools", () => {
       fixId: fix.id,
       repositoryId: "repo_demo_001",
       branchName: "mend/fix/" + fix.id,
-      mode: "controlled_snapshot",
+      mode: "source_snapshot",
       previewUrl: "https://preview.example.com/mend/",
       verified: true,
       verifiedAt: "2026-08-26T08:10:00.000Z",

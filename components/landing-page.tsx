@@ -112,7 +112,7 @@ const workflow = [
         {
           prefix: "→",
           tone: "context",
-          text: "Accessibility 74 → 83",
+          text: "Accessibility 74 → 89",
         },
         {
           prefix: "+",
@@ -157,7 +157,7 @@ export function LandingPage() {
   function loadDemo() {
     setUrl("https://demo.mend.local");
     setError("");
-    setNotice("Demo workspace loaded. Scan to open the mock audit.");
+    setNotice("Demo workspace loaded. Scan to open the deterministic audit.");
   }
 
   return (
@@ -186,7 +186,7 @@ export function LandingPage() {
               setNotice("Open the dashboard to connect the controlled demo repository.")
             }
           >
-            Connect GitHub
+            Connect demo source
             <ArrowUpRight width={14} height={14} />
           </button>
         </nav>
@@ -396,7 +396,7 @@ export function LandingPage() {
         <span>© 2026 Mend. Built for the WebMCP Challenge.</span>
         <span className="footer-status">
           <span className="state-dot" />
-            Phase 8 · Native scrapbook polish
+            Post-submission hardening · locally verified
         </span>
       </footer>
     </main>
