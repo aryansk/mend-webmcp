@@ -396,7 +396,7 @@ export function LandingPage() {
         <span>© 2026 Mend. Built for the WebMCP Challenge.</span>
         <span className="footer-status">
           <span className="state-dot" />
-            Post-submission hardening · locally verified
+            Production hardening · live verified
         </span>
       </footer>
     </main>

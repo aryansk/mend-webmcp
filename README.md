@@ -18,8 +18,9 @@ recovery. The controlled demo keeps its checked-in main fixture unchanged.
 
 Public source: [github.com/aryansk/mend-webmcp](https://github.com/aryansk/mend-webmcp)
 
-The public URL is the frozen submitted build. Post-submission hardening in this
-branch is intentionally not deployed while judging is active.
+The public URL runs the hardened build from `codex/post-submission-hardening`.
+Its production WebMCP registration, direct tool execution, approval recovery,
+apply, verification, and audit comparison were verified on August 27, 2026.
 
 ## Product preview
 
@@ -343,9 +344,9 @@ Then:
     action are restored before continuing.
 
 Browsers without WebMCP still support manual scanning and issue inspection; the
-status card reports that the agent control plane is unavailable. The submitted
-production build remains frozen; this hardened branch must be reverified on an
-HTTPS preview before any later authorized deployment.
+status card reports that the agent control plane is unavailable. Any later
+deployment must repeat the HTTPS preview and production WebMCP verification
+sequence before it is called successful.
 
 ## Known limitations
 
