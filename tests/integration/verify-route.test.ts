@@ -123,10 +123,10 @@ describe("fix verification API", () => {
     expect(payload).toMatchObject({
       verified: true,
       verification: {
-        mode: "controlled_snapshot",
+        mode: "source_snapshot",
         previewUrl: "https://preview.example.com/mend/",
         before: { scores: { accessibility: 74 } },
-        after: { scores: { accessibility: 83 } },
+        after: { scores: { accessibility: 89 } },
         resolvedIssueIds: ["issue_img_alt"],
         regressions: [],
       },
@@ -134,5 +134,73 @@ describe("fix verification API", () => {
     });
     expect(comparisonResponse.status).toBe(200);
     expect(afterSource.content).toBe(beforeSource.content);
+  });
+
+  it("reconstructs an applied source snapshot from its signed receipt", async () => {
+    const proposalResponse = await proposeFix(
+      new Request("http://localhost/api/fixes", {
+        method: "POST",
+        body: JSON.stringify({
+          repositoryId: "repo_demo_001",
+          issueIds: ["issue_form_label"],
+        }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const proposal = (await proposalResponse.json()) as { fix: { id: string } };
+
+    await requestApproval(
+      new Request("http://localhost/api/fixes/approval", {
+        method: "POST",
+        body: JSON.stringify({ fixId: proposal.fix.id }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const decisionResponse = await decideFix(
+      new Request("http://localhost/api/fixes/decision", {
+        method: "POST",
+        body: JSON.stringify({ fixId: proposal.fix.id, decision: "approved" }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const approvalCookie = decisionResponse.headers
+      .get("set-cookie")
+      ?.split(";")[0];
+    const applyResponse = await applyFix(
+      new Request("http://localhost/api/fixes/apply", {
+        method: "POST",
+        body: JSON.stringify({ fixId: proposal.fix.id }),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: approvalCookie ?? "",
+        },
+      }),
+    );
+    const appliedCookie = applyResponse.headers.get("set-cookie")?.split(";")[0];
+
+    clearFixStore();
+    clearDemoBranchStore();
+    clearVerificationStore();
+
+    const response = await verifyFix(
+      new Request("http://localhost/api/verify", {
+        method: "POST",
+        body: JSON.stringify({ fixId: proposal.fix.id }),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: appliedCookie ?? "",
+        },
+      }),
+    );
+    const payload = (await response.json()) as {
+      verification?: { resolvedIssueIds?: string[]; mode?: string };
+    };
+
+    expect(appliedCookie).toContain("mend_applied_receipt=");
+    expect(response.status).toBe(200);
+    expect(payload.verification).toMatchObject({
+      resolvedIssueIds: ["issue_form_label"],
+      mode: "source_snapshot",
+    });
   });
 });

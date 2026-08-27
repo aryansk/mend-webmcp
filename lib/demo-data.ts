@@ -135,5 +135,8 @@ export const demoAudit: Audit = {
     seo: 82,
   },
   brokenLinks: 3,
+  checkedLinks: 12,
+  scanMode: "demo",
+  scanProvider: "mend",
   issues: demoIssues,
 };

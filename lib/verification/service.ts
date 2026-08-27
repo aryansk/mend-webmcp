@@ -2,15 +2,11 @@ import { demoAudit } from "../demo-data";
 import { compareAudits } from "../audit/compare";
 import { getAudit, getAuditForIssue, saveAudit } from "../audit/store";
 import { getRepository } from "../repository/store";
-import type {
-  Audit,
-  ProposedFix,
-  ScoreKey,
-  VerificationResult,
-} from "../types";
+import type { Audit, ProposedFix, VerificationResult } from "../types";
 import { FixError } from "../fixes/errors";
 import { getFixOrRebuildDemo } from "../fixes/service";
 import { saveProposedFix } from "../fixes/store";
+import { verifySourceSnapshot } from "./source-snapshot";
 
 type VerificationStoreGlobal = typeof globalThis & {
   __mendVerificationStore?: Map<string, VerificationResult>;
@@ -21,15 +17,6 @@ const verifications =
   globalStore.__mendVerificationStore ?? new Map<string, VerificationResult>();
 
 globalStore.__mendVerificationStore = verifications;
-
-const scoreImpact: Record<string, Partial<Record<ScoreKey, number>>> = {
-  issue_img_alt: { accessibility: 9 },
-  issue_form_label: { accessibility: 10 },
-  issue_hero_size: { performance: 18 },
-  issue_heading_order: { accessibility: 5 },
-  issue_blocking_script: { performance: 12 },
-  issue_meta_description: { seo: 12 },
-};
 
 export async function verifyFix(fixId: string, previewInput?: unknown) {
   const existingVerification = verifications.get(fixId);
@@ -80,7 +67,13 @@ export async function verifyFix(fixId: string, previewInput?: unknown) {
   const previewUrl = normalizePreviewUrl(previewInput);
   const before = getBeforeAudit(fix);
   const afterId = "audit_verify_after_" + fix.id;
-  const after = createAfterAudit(before, afterId, fix, previewUrl);
+  const snapshot = await verifySourceSnapshot({
+    before,
+    fixId,
+    afterAuditId: afterId,
+    previewUrl,
+  });
+  const after = snapshot.after;
 
   saveAudit(before);
   saveAudit(after);
@@ -95,7 +88,7 @@ export async function verifyFix(fixId: string, previewInput?: unknown) {
     fixId: fix.id,
     repositoryId: repository.id,
     branchName: fix.applied.branchName,
-    mode: "controlled_snapshot",
+    mode: "source_snapshot",
     previewUrl,
     verified,
     verifiedAt,
@@ -108,7 +101,7 @@ export async function verifyFix(fixId: string, previewInput?: unknown) {
     resolvedIssueIds: comparison.resolvedIssueIds,
     remainingIssueIds: comparison.remainingIssueIds,
     regressions: comparison.regressions,
-    checks: createChecks(fix, comparison, verified),
+    checks: createChecks(fix, comparison, verified, snapshot.inspectedFiles),
   };
 
   verifications.set(fix.id, verification);
@@ -145,62 +138,25 @@ function getBeforeAudit(fix: ProposedFix): Audit {
   };
 }
 
-function createAfterAudit(
-  before: Audit,
-  afterId: string,
-  fix: ProposedFix,
-  previewUrl: string | null,
-): Audit {
-  const fixedIssueIds = new Set(fix.issueIds);
-
-  return {
-    ...before,
-    id: afterId,
-    siteUrl: previewUrl ?? before.siteUrl,
-    createdAt: new Date().toISOString(),
-    scores: applyScoreImpact(before.scores, fix.issueIds),
-    issues: before.issues
-      .filter((issue) => !fixedIssueIds.has(issue.id))
-      .map((issue) => ({ ...issue, auditId: afterId })),
-  };
-}
-
-function applyScoreImpact(
-  scores: Audit["scores"],
-  issueIds: string[],
-) {
-  const nextScores = { ...scores };
-
-  for (const issueId of issueIds) {
-    const impact = scoreImpact[issueId];
-
-    if (!impact) {
-      continue;
-    }
-
-    for (const key of Object.keys(impact) as ScoreKey[]) {
-      const current = nextScores[key];
-      const delta = impact[key];
-
-      if (current !== undefined && delta !== undefined) {
-        nextScores[key] = Math.min(100, current + delta);
-      }
-    }
-  }
-
-  return nextScores;
-}
-
 function createChecks(
   fix: ProposedFix,
   comparison: ReturnType<typeof compareAudits>,
   verified: boolean,
+  inspectedFiles: string[],
 ): VerificationResult["checks"] {
   const resolvedTargets = fix.issueIds.filter((issueId) =>
     comparison.resolvedIssueIds.includes(issueId),
   );
 
   return [
+    {
+      label: "Patched source",
+      status: inspectedFiles.length > 0 ? "passed" : "warning",
+      detail:
+        inspectedFiles.length > 0
+          ? "Re-ran deterministic checks against " + inspectedFiles.join(", ") + "."
+          : "No mapped source file was available for verification.",
+    },
     {
       label: "Target issues",
       status: resolvedTargets.length === fix.issueIds.length ? "passed" : "warning",

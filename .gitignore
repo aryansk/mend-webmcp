@@ -2,6 +2,8 @@ node_modules/
 .next/
 out/
 coverage/
+playwright-report/
+test-results/
 .vercel/
 *.tsbuildinfo
 .env
@@ -10,4 +12,6 @@ coverage/
 *.log
 .DS_Store
 .vercel
+audit-output-*/
+videos/
 .env*

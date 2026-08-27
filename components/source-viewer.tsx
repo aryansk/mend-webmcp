@@ -5,6 +5,7 @@ import type {
   RepositoryConnection,
   RepositorySourceView,
 } from "../lib/repository/types";
+import { useDialogAccessibility } from "./use-dialog-accessibility";
 
 export function SourceViewer({
   repository,
@@ -18,6 +19,7 @@ export function SourceViewer({
   const lines = source.content.split("\n");
   const contextStart = Math.max(1, source.lineStart - 3);
   const contextEnd = Math.min(lines.length, source.lineEnd + 3);
+  const dialogRef = useDialogAccessibility(true, onClose);
 
   return (
     <div
@@ -30,10 +32,12 @@ export function SourceViewer({
       }}
     >
       <section
+        ref={dialogRef}
         className="source-viewer-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="source-viewer-title"
+        tabIndex={-1}
       >
         <div className="source-viewer-header">
           <div>

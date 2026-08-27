@@ -1,7 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -14,7 +13,6 @@ import {
   ExternalLink,
   Gauge,
   GitBranch,
-  Link2,
   LogoMark,
   Search,
   ShieldCheck,
@@ -31,6 +29,8 @@ import type {
 } from "../lib/repository/types";
 import { WebMcpBridge } from "./webmcp-bridge";
 import { SourceViewer } from "./source-viewer";
+import { AuditOverview } from "./audit-overview";
+import { useDialogAccessibility } from "./use-dialog-accessibility";
 import type {
   ActivityEvent,
   AppliedFix,
@@ -38,39 +38,12 @@ import type {
   AuditCategory,
   Issue,
   ProposedFix,
-  ScoreKey,
   VerificationResult,
 } from "../lib/types";
-
-const scoreCards: Array<{
-  key: ScoreKey;
-  label: string;
-  detail: string;
-  color: string;
-  icon: typeof Gauge;
-}> = [
-  {
-    key: "performance",
-    label: "Performance",
-    detail: "Page speed",
-    color: "#75D6A2",
-    icon: Gauge,
-  },
-  {
-    key: "accessibility",
-    label: "Accessibility",
-    detail: "Inclusive UX",
-    color: "#B79BEF",
-    icon: ShieldCheck,
-  },
-  {
-    key: "seo",
-    label: "SEO",
-    detail: "Search readiness",
-    color: "#6CB9E8",
-    icon: Search,
-  },
-];
+import {
+  loadPersistedWorkspace,
+  savePersistedWorkspace,
+} from "../lib/workspace/client-persistence";
 
 const initialActivity: ActivityEvent[] = [
   {
@@ -108,6 +81,13 @@ const EMPTY_ISSUE: Issue = {
   estimatedImpact: "A completed audit will show evidence and impact here.",
 };
 
+let activitySequence = 0;
+
+function createActivityId() {
+  activitySequence += 1;
+  return "activity-" + Date.now() + "-" + activitySequence;
+}
+
 export function DashboardPage({
   initialSiteUrl,
   initialAudit,
@@ -124,6 +104,7 @@ export function DashboardPage({
   );
   const [isScanning, setIsScanning] = useState(false);
   const [patchVisible, setPatchVisible] = useState(false);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [activeFix, setActiveFix] = useState<ProposedFix | null>(null);
   const [appliedBranch, setAppliedBranch] = useState<AppliedFix | null>(null);
   const [verification, setVerification] = useState<VerificationResult | null>(null);
@@ -143,10 +124,116 @@ export function DashboardPage({
   } | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [sourceError, setSourceError] = useState("");
+  const [persistenceReady, setPersistenceReady] = useState(false);
   const [webmcpStatus, setWebmcpStatus] = useState<WebMcpStatus>({
     state: "checking",
     registeredTools: [],
   });
+  const closePatch = useCallback(() => setPatchVisible(false), []);
+  const patchTriggerRef = useRef<HTMLElement | null>(null);
+  const patchDialogRef = useDialogAccessibility(
+    patchVisible,
+    closePatch,
+    patchTriggerRef,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (cancelled) {
+        return;
+      }
+
+      const restored = loadPersistedWorkspace(initialSiteUrl);
+
+      if (restored) {
+        setSiteUrl(restored.siteUrl);
+        setAudit(restored.audit);
+        setSelectedIssueId(
+          restored.selectedIssueId || restored.audit?.issues[0]?.id || "",
+        );
+        setRepository(restored.repository);
+        setActiveFix(restored.activeFix);
+        setAppliedBranch(restored.appliedBranch);
+        setVerification(restored.verification);
+        setActivity([
+          {
+            id: createActivityId(),
+            label: "Workspace restored",
+            detail: "Recovered the latest audit and approval-gated repair state.",
+            tone: "success",
+            time: "just now",
+          },
+          ...restored.activity.filter(
+            (event) => event.label !== "Workspace restored",
+          ),
+        ]);
+        setPatchVisible(
+          Boolean(restored.activeFix && !restored.verification?.verified),
+        );
+        setNotice("Restored the latest workspace state from this browser.");
+
+        if (restored.repository?.provider === "demo") {
+          void fetch("/api/repositories", {
+            body: JSON.stringify({ provider: "demo" }),
+            headers: { "Content-Type": "application/json" },
+            method: "POST",
+          })
+            .then((response) => response.json())
+            .then(
+              (payload: {
+                repository?: RepositoryConnection;
+                files?: RepositoryFile[];
+              }) => {
+                if (!cancelled && payload.repository && payload.files) {
+                  setRepository(payload.repository);
+                  cacheRepositorySnapshot({
+                    repository: payload.repository,
+                    files: payload.files,
+                  });
+                }
+              },
+            )
+            .catch(() => undefined);
+        }
+      }
+
+      setPersistenceReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSiteUrl]);
+
+  useEffect(() => {
+    if (!persistenceReady) {
+      return;
+    }
+
+    savePersistedWorkspace({
+      version: 1,
+      siteUrl,
+      audit,
+      selectedIssueId,
+      repository,
+      activeFix,
+      appliedBranch,
+      verification,
+      activity: activity.slice(0, 20),
+    });
+  }, [
+    activeFix,
+    activity,
+    appliedBranch,
+    audit,
+    persistenceReady,
+    repository,
+    selectedIssueId,
+    siteUrl,
+    verification,
+  ]);
 
   const applyAudit = useCallback(
     (nextAudit: Audit, activityLabel: string, activityDetail: string) => {
@@ -159,15 +246,16 @@ export function DashboardPage({
       setAppliedBranch(null);
       setVerification(null);
       setPatchVisible(false);
+      setMobileDetailOpen(false);
       setActivity((current) => [
         {
-          id: "activity-" + Date.now(),
+          id: createActivityId(),
           label: activityLabel,
           detail: activityDetail,
           tone: "success",
           time: "just now",
         },
-        ...current,
+        ...current.filter((event) => event.id !== "activity-3"),
       ]);
     },
     [],
@@ -198,7 +286,7 @@ export function DashboardPage({
     );
     setActivity((current) => [
       {
-        id: "activity-" + Date.now(),
+        id: createActivityId(),
         label:
           fix.approvalStatus === "waiting_for_human"
             ? "Approval requested"
@@ -226,7 +314,7 @@ export function DashboardPage({
     );
     setActivity((current) => [
       {
-        id: "activity-" + Date.now(),
+        id: createActivityId(),
         label: "Demo branch created",
         detail: branch.branchName + " · commit " + branch.commitSha.slice(0, 8),
         tone: "success",
@@ -238,6 +326,7 @@ export function DashboardPage({
 
   const handleToolVerify = useCallback((nextVerification: VerificationResult) => {
     setVerification(nextVerification);
+    setPatchVisible(false);
     setVerificationError("");
     setNotice(
       nextVerification.verified
@@ -246,7 +335,7 @@ export function DashboardPage({
     );
     setActivity((current) => [
       {
-        id: "activity-" + Date.now(),
+        id: createActivityId(),
         label: nextVerification.verified ? "Verification passed" : "Verification needs review",
         detail:
           nextVerification.resolvedIssueIds.length +
@@ -325,6 +414,13 @@ export function DashboardPage({
     ? getAuditSummary(audit)
     : { issueCount: 0, highImpactIssueCount: 0 };
   const isDemoAudit = audit?.id === "audit_demo_001";
+  const auditMethodLabel = isDemoAudit
+    ? "Deterministic source fixture"
+    : audit?.scanMode === "lighthouse_mobile"
+      ? "Rendered mobile Lighthouse"
+      : audit
+        ? "Bounded static HTML"
+        : "No scan method";
 
   async function handleRescan() {
     setIsScanning(true);
@@ -404,7 +500,7 @@ export function DashboardPage({
       });
       setActivity((current) => [
         {
-          id: "activity-" + Date.now(),
+          id: createActivityId(),
           label: "Demo repository connected",
           detail:
             connectedRepository.fullName +
@@ -414,7 +510,7 @@ export function DashboardPage({
           tone: "success",
           time: "just now",
         },
-        ...current,
+        ...current.filter((event) => event.id !== "activity-3"),
       ]);
       setNotice(
         "Connected " +
@@ -490,6 +586,10 @@ export function DashboardPage({
       return;
     }
 
+    patchTriggerRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     setIsProposing(true);
     setFixError("");
     setNotice("");
@@ -536,7 +636,7 @@ export function DashboardPage({
       setNotice("A patch is ready. Review it and make the approval decision.");
       setActivity((current) => [
         {
-          id: "activity-" + Date.now(),
+          id: createActivityId(),
           label: "Approval requested",
           detail: selectedIssue.title,
           tone: "neutral",
@@ -588,7 +688,7 @@ export function DashboardPage({
       );
       setActivity((current) => [
         {
-          id: "activity-" + Date.now(),
+          id: createActivityId(),
           label: decision === "approved" ? "Human approval recorded" : "Patch rejected",
             detail:
             decision === "approved"
@@ -651,7 +751,7 @@ export function DashboardPage({
       );
       setActivity((current) => [
         {
-          id: "activity-" + Date.now(),
+          id: createActivityId(),
           label: "Demo branch created",
           detail:
             payload.branch?.branchName +
@@ -811,16 +911,19 @@ export function DashboardPage({
             <span className="status-progress-label">
               {webmcpStatus.state === "ready"
                   ? webmcpStatus.registeredTools.length + " tools registered"
-                : "Phase 8 of 8"}
+                : "Progressive enhancement"}
             </span>
             {webmcpStatus.registeredTools.length > 0 ? (
-              <div className="webmcp-tool-list" aria-label="Registered WebMCP tools">
-                {webmcpStatus.registeredTools.map((toolName) => (
-                  <span className="webmcp-tool-chip" key={toolName}>
-                    {toolName}
-                  </span>
-                ))}
-              </div>
+              <details className="webmcp-tool-details">
+                <summary>View registered tools</summary>
+                <div className="webmcp-tool-list" aria-label="Registered WebMCP tools">
+                  {webmcpStatus.registeredTools.map((toolName) => (
+                    <span className="webmcp-tool-chip" key={toolName}>
+                      {toolName}
+                    </span>
+                  ))}
+                </div>
+              </details>
             ) : null}
           </div>
           <Link className="sidebar-footer-link" href="/">
@@ -841,7 +944,13 @@ export function DashboardPage({
             <div className="dashboard-title-row">
               <h1>{formatSiteName(siteUrl)}</h1>
               <span className="mock-badge">
-                {isDemoAudit ? "DEMO DATA" : audit ? "LIVE AUDIT" : "NO AUDIT"}
+                {isDemoAudit
+                  ? "DEMO DATA"
+                  : audit?.scanMode === "lighthouse_mobile"
+                    ? "RENDERED AUDIT"
+                    : audit
+                      ? "STATIC AUDIT"
+                      : "NO AUDIT"}
               </span>
             </div>
             <p className="dashboard-subtitle">
@@ -850,9 +959,16 @@ export function DashboardPage({
                   summary.issueCount +
                   " issues found · " +
                   summary.highImpactIssueCount +
-                  " high impact"
+                  " high impact · " +
+                  auditMethodLabel
                 : "No completed audit is available for this target."}
             </p>
+            {audit?.scanWarning ? (
+              <p className="dashboard-scan-warning">
+                <AlertTriangle width={13} height={13} />
+                {audit.scanWarning}
+              </p>
+            ) : null}
           </div>
           <div className="dashboard-header-actions">
             <button
@@ -946,195 +1062,11 @@ export function DashboardPage({
           </div>
         ) : null}
 
-        <div className="score-grid">
-          {scoreCards.map((card) => {
-            const Icon = card.icon;
-            const score = audit?.scores[card.key];
-            const ringStyle = {
-              "--score": score ?? 0,
-              "--ring-color": card.color,
-            } as CSSProperties;
-
-            return (
-              <article className="score-card" key={card.key}>
-                <div className="score-card-heading">
-                  <span className="score-card-icon" style={{ color: card.color }}>
-                    <Icon width={17} height={17} />
-                  </span>
-                  <span>
-                    <strong>{card.label}</strong>
-                    <small>{card.detail}</small>
-                  </span>
-                  <button
-                    className="card-menu"
-                    type="button"
-                    aria-label={"More " + card.label + " options"}
-                    onClick={() =>
-                      setNotice(
-                        card.label +
-                          " history will be available once audit persistence is added.",
-                      )
-                    }
-                  >
-                    ···
-                  </button>
-                </div>
-                <div className="score-card-value-row">
-                  <div className="score-ring" style={ringStyle}>
-                    <span>{score === undefined ? "—" : score}</span>
-                  </div>
-                  <div className="score-card-trend">
-                    <span className="trend-neutral">
-                      {audit ? "current" : "waiting"}
-                    </span>
-                    <small>{audit ? "Ready to improve" : "Run an audit"}</small>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-          <article className="score-card broken-links-card">
-            <div className="score-card-heading">
-              <span className="score-card-icon score-card-icon-red">
-                <Link2 width={17} height={17} />
-              </span>
-              <span>
-                <strong>Broken links</strong>
-                <small>Reachability</small>
-              </span>
-              <button
-                className="card-menu"
-                type="button"
-                aria-label="More broken links options"
-                onClick={() => setNotice("Broken links are checked within each live audit.")}
-              >
-                ···
-              </button>
-            </div>
-            <div className="broken-link-value">
-              <strong>{audit ? audit.brokenLinks : "—"}</strong>
-              <span>found</span>
-            </div>
-            <div className="broken-link-bar">
-              <span
-                style={{
-                  width: audit
-                    ? Math.min(100, audit.brokenLinks * 18) + "%"
-                    : "0%",
-                }}
-              />
-            </div>
-            <small className="score-card-footnote">
-              {audit
-                ? (audit.checkedLinks ?? 0) + " same-site routes checked"
-                : "Awaiting audit"}
-            </small>
-          </article>
-        </div>
-
-        {verification ? (
-          <section className="verification-panel panel" id="verification">
-            <div className="panel-header verification-header">
-              <div>
-                <span className="micro-label">BEFORE / AFTER VERIFICATION</span>
-                <h2>{verification.verified ? "Fix verified" : "Verification needs review"}</h2>
-                <p>
-                  {verification.mode === "controlled_snapshot"
-                    ? "Controlled branch snapshot replay"
-                    : "Preview verification"}
-                  {verification.previewUrl ? " · " + verification.previewUrl : ""}
-                </p>
-              </div>
-              <span
-                className={
-                  "verification-badge " +
-                  (verification.verified
-                    ? "verification-badge-passed"
-                    : "verification-badge-warning")
-                }
-              >
-                {verification.verified ? "PASSED" : "REVIEW"}
-              </span>
-            </div>
-            <div className="verification-metrics">
-              {scoreCards.map((card) => {
-                const beforeScore = verification.before.scores[card.key];
-                const afterScore = verification.after.scores[card.key];
-                const delta = verification.scoreDelta[card.key];
-
-                return (
-                  <div className="verification-metric" key={card.key}>
-                    <span>{card.label}</span>
-                    <strong>
-                      {beforeScore ?? "—"} <small>→</small> {afterScore ?? "—"}
-                    </strong>
-                    <em
-                      className={
-                        delta !== undefined && delta >= 0
-                          ? "delta-positive"
-                          : "delta-neutral"
-                      }
-                    >
-                      {formatDelta(delta)}
-                    </em>
-                  </div>
-                );
-              })}
-              <div className="verification-metric">
-                <span>Broken links</span>
-                <strong>
-                  {verification.before.brokenLinks} <small>→</small>{" "}
-                  {verification.after.brokenLinks}
-                </strong>
-                <em
-                  className={
-                    verification.brokenLinksDelta <= 0
-                      ? "delta-positive"
-                      : "delta-neutral"
-                  }
-                >
-                  {formatDelta(verification.brokenLinksDelta)}
-                </em>
-              </div>
-            </div>
-            <div className="verification-details">
-              <div className="verification-check-list">
-                {verification.checks.map((check) => (
-                  <div className="verification-check" key={check.label}>
-                    <span
-                      className={
-                        "verification-check-icon " +
-                        (check.status === "passed" ? "check-passed" : "check-warning")
-                      }
-                    >
-                      {check.status === "passed" ? (
-                        <Check width={13} height={13} />
-                      ) : (
-                        <AlertTriangle width={13} height={13} />
-                      )}
-                    </span>
-                    <span>
-                      <strong>{check.label}</strong>
-                      <small>{check.detail}</small>
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="verification-summary-copy">
-                <span className="detail-label">Saved audit chain</span>
-                <code>{verification.beforeAuditId}</code>
-                <span>to</span>
-                <code>{verification.afterAuditId}</code>
-                <small>
-                  {verification.resolvedIssueIds.length} resolved ·{" "}
-                  {verification.remainingIssueIds.length} remaining ·{" "}
-                  {verification.regressions.length} regressions
-                </small>
-              </div>
-            </div>
-          </section>
-        ) : null}
-
+        <AuditOverview
+          audit={audit}
+          verification={verification}
+          onNotice={setNotice}
+        />
         <div className="dashboard-grid">
           <section className="issues-panel panel" id="issues">
             <div className="panel-header">
@@ -1161,6 +1093,7 @@ export function DashboardPage({
                     }
                     key={issue.id}
                     type="button"
+                    aria-pressed={selectedIssue?.id === issue.id}
                     onClick={() => {
                       setSelectedIssueId(issue.id);
                       setActiveFix(null);
@@ -1168,6 +1101,7 @@ export function DashboardPage({
                       setVerification(null);
                       setPatchVisible(false);
                       setNotice("");
+                      setMobileDetailOpen(true);
                     }}
                   >
                     <span className={"severity-mark severity-" + issue.severity} />
@@ -1216,7 +1150,12 @@ export function DashboardPage({
             </div>
           </section>
 
-          <section className="issue-detail-panel panel">
+          <section
+            className={
+              "issue-detail-panel panel " +
+              (mobileDetailOpen ? "mobile-detail-open" : "")
+            }
+          >
             <div className="panel-header detail-header">
               <div>
                 <span className="micro-label">SELECTED ISSUE</span>
@@ -1225,6 +1164,14 @@ export function DashboardPage({
               <span className={"severity-badge severity-badge-" + displayIssue.severity}>
                 {displayIssue.severity}
               </span>
+              <button
+                className="mobile-detail-close"
+                type="button"
+                onClick={() => setMobileDetailOpen(false)}
+                aria-label="Back to issues"
+              >
+                <X width={17} height={17} />
+              </button>
             </div>
             <div className="detail-content">
               <div className="detail-title-row">
@@ -1355,15 +1302,17 @@ export function DashboardPage({
           role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
-              setPatchVisible(false);
+              closePatch();
             }
           }}
         >
           <section
+            ref={patchDialogRef}
             className="patch-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="patch-modal-title"
+            tabIndex={-1}
           >
             <div className="patch-modal-header">
               <div>
@@ -1375,7 +1324,7 @@ export function DashboardPage({
               <button
                 className="modal-close"
                 type="button"
-                onClick={() => setPatchVisible(false)}
+                onClick={closePatch}
                 aria-label="Close patch preview"
               >
                 <X width={18} height={18} />
@@ -1473,7 +1422,7 @@ export function DashboardPage({
               <button
                 className="secondary-button"
                 type="button"
-                onClick={() => setPatchVisible(false)}
+                onClick={closePatch}
               >
                 Keep as draft
               </button>
@@ -1583,14 +1532,6 @@ function formatPage(value: string) {
   } catch {
     return value;
   }
-}
-
-function formatDelta(value: number | undefined) {
-  if (value === undefined) {
-    return "—";
-  }
-
-  return (value > 0 ? "+" : "") + value;
 }
 
 function getWebMcpStatusLabel(state: WebMcpStatus["state"]) {

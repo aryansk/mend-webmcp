@@ -12,6 +12,7 @@ import {
 } from "./url-safety";
 import { demoAudit } from "../demo-data";
 import type { Audit, AuditCategory } from "../types";
+import { enrichAuditWithPageSpeed } from "./pagespeed";
 
 export const allAuditCategories: AuditCategory[] = [
   "accessibility",
@@ -60,7 +61,7 @@ export async function runAuditForUrl(
     linkResults,
   });
 
-  return saveAudit({
+  const staticAudit: Audit = {
     id: auditId,
     siteUrl: targetUrl.toString(),
     createdAt: new Date().toISOString(),
@@ -71,7 +72,11 @@ export async function runAuditForUrl(
     responseBytes: fetched.responseBytes,
     responseTimeMs: fetched.responseTimeMs,
     checkedLinks: linkResults.length,
-  });
+    scanMode: "static_html",
+    scanProvider: "mend",
+  };
+
+  return saveAudit(await enrichAuditWithPageSpeed(staticAudit, categories));
 }
 
 export function normalizeCategories(input: unknown): AuditCategory[] {

@@ -3,6 +3,11 @@ import {
   decideFix,
   getFixDiffPayload,
 } from "../../../../lib/fixes/service";
+import {
+  createWorkspaceReceipt,
+  serializeClearedWorkspaceReceiptCookie,
+  serializeWorkspaceReceiptCookie,
+} from "../../../../lib/workspace/receipts";
 
 export async function POST(request: Request) {
   let body: { fixId?: unknown; decision?: unknown };
@@ -35,10 +40,24 @@ export async function POST(request: Request) {
 
   try {
     const fix = await decideFix(body.fixId.trim(), body.decision);
+    const receipt =
+      body.decision === "approved"
+        ? createWorkspaceReceipt("approval", fix.id)
+        : null;
+    const headers: Record<string, string> = noStoreHeaders();
+
+    if (receipt) {
+      headers["Set-Cookie"] = serializeWorkspaceReceiptCookie(
+        "approval",
+        receipt,
+      );
+    } else if (body.decision === "rejected") {
+      headers["Set-Cookie"] = serializeClearedWorkspaceReceiptCookie("approval");
+    }
 
     return Response.json(
       { fix: getFixDiffPayload(fix), approvalStatus: fix.approvalStatus },
-      { headers: noStoreHeaders() },
+      { headers },
     );
   } catch (error) {
     return Response.json(

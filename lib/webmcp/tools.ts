@@ -29,6 +29,9 @@ const auditCategories: AuditCategory[] = [
 
 const issueSeverities: Severity[] = ["critical", "high", "medium", "low"];
 const MAX_CACHED_AUDITS = 12;
+const fallbackExecutionContext: WebMcpExecuteContext = {
+  signal: new AbortController().signal,
+};
 const auditCache = new Map<string, Audit>();
 const fixCache = new Map<string, ProposedFix>();
 let repositoryCache: {
@@ -47,7 +50,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
   return [
     {
       ...MEND_TOOL_METADATA.scan_site,
-      execute: (input, context) =>
+      execute: (input, context = fallbackExecutionContext) =>
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const url = readRequiredString(values, "url");
@@ -70,12 +73,15 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
             scores: audit.scores,
             issueCount: audit.issues.length,
             highImpactIssueCount: countHighImpactIssues(audit),
+            scanMode: audit.scanMode ?? "static_html",
+            scanProvider: audit.scanProvider ?? "mend",
+            scanWarning: audit.scanWarning ?? null,
           };
         }),
     },
     {
       ...MEND_TOOL_METADATA.get_audit_summary,
-      execute: (input, context) =>
+      execute: (input, context = fallbackExecutionContext) =>
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const auditId = readRequiredString(values, "auditId");
@@ -86,7 +92,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
     },
     {
       ...MEND_TOOL_METADATA.list_issues,
-      execute: (input, context) =>
+      execute: (input, context = fallbackExecutionContext) =>
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const auditId = readRequiredString(values, "auditId");
@@ -113,7 +119,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
     },
     {
       ...MEND_TOOL_METADATA.inspect_issue,
-      execute: (input, context) =>
+      execute: (input, context = fallbackExecutionContext) =>
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const issueId = readRequiredString(values, "issueId");
@@ -138,7 +144,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
     },
     {
       ...MEND_TOOL_METADATA.compare_audits,
-      execute: (input, context) =>
+      execute: (input, context = fallbackExecutionContext) =>
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const beforeAuditId = readRequiredString(values, "beforeAuditId");
@@ -153,7 +159,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
     },
     {
       ...MEND_TOOL_METADATA.get_repository_status,
-      execute: (input, context) =>
+      execute: (input, context = fallbackExecutionContext) =>
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const requestedRepositoryId = readOptionalString(
@@ -202,7 +208,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
     },
     {
       ...MEND_TOOL_METADATA.list_repository_files,
-      execute: (input, context) =>
+      execute: (input, context = fallbackExecutionContext) =>
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const repositoryId = readRequiredString(values, "repositoryId");
@@ -222,7 +228,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
     },
     {
       ...MEND_TOOL_METADATA.inspect_source,
-      execute: (input, context) =>
+      execute: (input, context = fallbackExecutionContext) =>
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const repositoryId = readRequiredString(values, "repositoryId");
@@ -256,7 +262,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
     },
     {
       ...MEND_TOOL_METADATA.propose_fix,
-      execute: (input, context) =>
+      execute: (input, context = fallbackExecutionContext) =>
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const repositoryId = readRequiredString(values, "repositoryId");
@@ -289,7 +295,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
     },
     {
       ...MEND_TOOL_METADATA.get_fix_diff,
-      execute: (input, context) =>
+      execute: (input, context = fallbackExecutionContext) =>
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const fixId = readRequiredString(values, "fixId");
@@ -302,7 +308,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
     },
     {
       ...MEND_TOOL_METADATA.request_fix_approval,
-      execute: (input, context) =>
+      execute: (input, context = fallbackExecutionContext) =>
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const fixId = readRequiredString(values, "fixId");
@@ -327,7 +333,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
     },
     {
       ...MEND_TOOL_METADATA.apply_approved_fix,
-      execute: (input, context) =>
+      execute: (input, context = fallbackExecutionContext) =>
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const fixId = readRequiredString(values, "fixId");
@@ -360,7 +366,7 @@ export function createMendTools(callbacks: MendToolCallbacks): WebMcpTool[] {
     },
     {
       ...MEND_TOOL_METADATA.verify_fix,
-      execute: (input, context) =>
+      execute: (input, context = fallbackExecutionContext) =>
         safelyExecute(context, async () => {
           const values = readRecord(input);
           const fixId = readRequiredString(values, "fixId");
@@ -661,6 +667,10 @@ function getCompactSummary(audit: Audit) {
     highImpactIssueCount: countHighImpactIssues(audit),
     scores: audit.scores,
     brokenLinks: audit.brokenLinks,
+    checkedLinks: audit.checkedLinks ?? 0,
+    scanMode: audit.scanMode ?? "static_html",
+    scanProvider: audit.scanProvider ?? "mend",
+    scanWarning: audit.scanWarning ?? null,
   };
 }
 

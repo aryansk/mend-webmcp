@@ -1,6 +1,8 @@
 import { getFixErrorMessage, FixError } from "../../../lib/fixes/errors";
 import { getFixDiffPayload } from "../../../lib/fixes/service";
 import { verifyFix } from "../../../lib/verification/service";
+import { applyApprovedFix } from "../../../lib/fixes/apply";
+import { requestHasWorkspaceReceipt } from "../../../lib/workspace/receipts";
 
 export async function POST(request: Request) {
   let body: { fixId?: unknown; previewUrl?: unknown };
@@ -22,7 +24,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await verifyFix(body.fixId.trim(), body.previewUrl);
+    const fixId = body.fixId.trim();
+
+    if (requestHasWorkspaceReceipt(request, "applied", fixId)) {
+      await applyApprovedFix(fixId, true);
+    }
+
+    const result = await verifyFix(fixId, body.previewUrl);
 
     if (!result.fix) {
       throw new FixError("The proposed fix was not found.", "fix_not_found", 404);

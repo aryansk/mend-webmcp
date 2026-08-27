@@ -20,7 +20,10 @@ const branches =
 
 globalStore.__mendDemoBranchStore = branches;
 
-export async function applyApprovedFix(fixId: string) {
+export async function applyApprovedFix(
+  fixId: string,
+  approvedByReceipt = false,
+) {
   const existingBranch = branches.get(fixId);
 
   if (existingBranch) {
@@ -41,10 +44,22 @@ export async function applyApprovedFix(fixId: string) {
     };
   }
 
-  const fix = await getFixOrRebuildDemo(fixId);
+  let fix = await getFixOrRebuildDemo(fixId);
 
   if (!fix) {
     throw new FixError("The proposed fix was not found.", "fix_not_found", 404);
+  }
+
+  if (
+    approvedByReceipt &&
+    (fix.approvalStatus !== "approved" || fix.status !== "approved")
+  ) {
+    fix = saveProposedFix({
+      ...fix,
+      status: "approved",
+      approvalStatus: "approved",
+      decisionAt: fix.decisionAt ?? new Date().toISOString(),
+    });
   }
 
   if (fix.approvalStatus !== "approved" || fix.status !== "approved") {
@@ -112,6 +127,26 @@ export function getDemoBranch(fixId: string) {
   const branch = branches.get(fixId);
 
   return branch ? toPublicBranch(branch) : undefined;
+}
+
+export async function readDemoBranchFile(fixId: string, filePath: string) {
+  const branch = branches.get(fixId);
+
+  if (!branch) {
+    throw new FixError(
+      "Apply the approved fix before reading its branch snapshot.",
+      "fix_not_applied",
+      409,
+    );
+  }
+
+  const patchedContent = branch.files.get(filePath);
+
+  if (patchedContent !== undefined) {
+    return patchedContent;
+  }
+
+  return (await readDemoRepositoryFile(filePath)).content;
 }
 
 export function clearDemoBranchStore() {
