@@ -1,370 +1,341 @@
+<div align="center">
+
 # Mend
 
-Mend is an agent-native website repair workspace. It turns a website audit into
-a shared human and agent workflow: scan, understand, propose, approve, fix, and
-verify.
+### Safe, verified website repairs through WebMCP
 
-The project is submitted to the OpenAI WebMCP Challenge. The current build has a
-bounded server-side audit pipeline, optional rendered mobile Lighthouse results,
-thirteen feature-detected WebMCP tools, a controlled repository source viewer,
-an approval-gated branch snapshot flow, source-backed verification, reload-safe
-browser workspace state, and signed server receipts for approval and apply
-recovery. The controlled demo keeps its checked-in main fixture unchanged.
+Mend turns a website audit into a shared human–agent workflow. An agent can
+scan a site, inspect evidence, map findings to source, and prepare a patch. The
+human reviews the exact diff before anything changes. Mend then applies the
+approved repair to an isolated branch snapshot and verifies the result.
 
-## Live demo
+**Scan → Understand → Propose → Approve → Fix → Verify**
 
-[Open Mend](https://mend-webmcp.vercel.app/)
+<p>
+  <a href="https://mend-webmcp.vercel.app/"><img alt="Open live demo" src="https://img.shields.io/badge/Open_live_demo-111111?style=for-the-badge&logo=vercel&logoColor=white"></a>
+  <a href="https://devpost.com/software/mend-safe-verified-website-repairs-with-webmcp"><img alt="View Devpost submission" src="https://img.shields.io/badge/Devpost_submission-003E54?style=for-the-badge&logo=devpost&logoColor=white"></a>
+  <a href="https://www.youtube.com/watch?v=yrF_mGdoVAY"><img alt="Watch the demo video" src="https://img.shields.io/badge/Watch_2%3A15_demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white"></a>
+</p>
 
-Public source: [github.com/aryansk/mend-webmcp](https://github.com/aryansk/mend-webmcp)
+<p>
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white">
+  <img alt="WebMCP" src="https://img.shields.io/badge/WebMCP-13_tools-7C3AED">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-22C55E"></a>
+</p>
 
-Submission: [Devpost project page](https://devpost.com/software/mend-safe-verified-website-repairs-with-webmcp)
+</div>
 
-Demo video: [Watch the 2:15 public YouTube demo](https://www.youtube.com/watch?v=yrF_mGdoVAY)
+![Mend audit and repair workspace](./public/mend-dashboard-preview.png)
 
-The hardened build is merged into the default branch and deployed at the public
-URL. On August 31, 2026, the production site was verified with direct execution
-of all 13 WebMCP tools, approval recovery after reload, safe branch application,
-source-backed verification, and audit comparison. A fresh rendered mobile
-Lighthouse scan returned Performance 95, Accessibility 100, and SEO 100.
+## The problem
 
-## Product preview
+Website audits are good at telling you what is wrong. Coding agents are good at
+editing source. The difficult part is everything between those two moments:
+finding the responsible file, deciding whether a proposed change is safe,
+getting approval, and proving the repair actually improved the site.
 
-![Mend dashboard preview](public/mend-dashboard-preview.png)
+Mend brings that disconnected workflow into one visible workspace:
 
-## Why Mend
+| Stage | Agent contribution | Human control |
+| --- | --- | --- |
+| **Scan** | Runs bounded accessibility, performance, SEO, and link checks | Chooses the target site |
+| **Understand** | Prioritizes findings and retrieves evidence | Sees the same issue context |
+| **Propose** | Maps the issue to source and generates an exact diff | Reviews files, lines, and expected impact |
+| **Approve** | Surfaces the patch for a decision | Explicitly approves or rejects it |
+| **Fix** | Creates an isolated branch snapshot | Main remains unchanged |
+| **Verify** | Re-runs checks and compares audits | Sees resolved issues and regressions |
 
-Website owners have tools that report accessibility and performance issues, and
-developers have tools that can edit source code. The difficult part is the
-handoff between those systems. Mend keeps evidence, source hints, proposed
-diffs, approval, and verification in one workspace.
+## Why WebMCP
 
-WebMCP adds a structured agent control plane to the same human UI. An agent can
-call compact tools to scan a site, retrieve a summary, filter issues, inspect
-evidence, compare audits, read mapped source context, generate an exact diff,
-and request human approval. After approval, the agent can create an isolated
-branch snapshot without editing main, then replay verification against that
-snapshot. Tool-triggered scans, fix proposals, branch records, and verification
-results update the visible dashboard immediately, so the agent and human operate
-on the same state. The human still approves every source-changing action.
+Mend is useful as a normal website, but WebMCP makes it agent-native. The
+dashboard registers a small, coherent tool surface through
+`document.modelContext`, allowing an agent to work with the same state the
+human can see instead of guessing at buttons or depending on a separate hidden
+integration.
 
-## Architecture
+WebMCP is the control plane for the complete repair story:
 
-```text
-Human UI and active agent
-          |
-          v
-document.modelContext  -->  WebMCP tool callbacks  -->  Next.js APIs
-          |                                           |
-          v                                           v
-Dashboard state  <-----  audit / fix / verify stores  demo repository
-                                      |
-                                      v
-                         branch snapshot and audit comparison
+```mermaid
+flowchart LR
+    H[Human] --> UI[Mend workspace]
+    A[AI agent] --> MCP[document.modelContext]
+    MCP --> T[13 WebMCP tools]
+    UI --> API[Next.js route handlers]
+    T --> API
+    API --> AUDIT[Bounded audit pipeline]
+    API --> SOURCE[Controlled source repository]
+    SOURCE --> DIFF[Proposed patch and exact diff]
+    DIFF --> GATE{Human approved?}
+    GATE -- No --> STOP[No source change]
+    GATE -- Yes --> BRANCH[Isolated branch snapshot]
+    BRANCH --> VERIFY[Re-audit and compare]
+    VERIFY --> UI
 ```
 
-The browser and agent use the same route handlers and bounded domain models.
-The controlled repository stays server-side, while the dashboard receives only
-the source context, diff, branch metadata, and verification result needed for
-human review.
+Tool-driven scans, proposals, approval requests, branch records, and
+verification results immediately appear in the dashboard. Human actions in the
+dashboard are visible to subsequent tool calls. Registration is feature
+detected and tied to the React lifecycle with an `AbortController`, so Mend
+still works in a normal browser and does not leave duplicate or stale tools
+behind after navigation.
 
-## Current UI
+## Verified production result
 
-- Landing page with URL validation and a deterministic demo entry point.
-- Responsive audit dashboard with live performance, accessibility, SEO, and
-  broken link score cards.
-- Prioritized issue list with severity, category, page, evidence, and source
-  confidence.
-- Server-side HTML checks for missing alt text, unlabeled controls, heading
-  hierarchy, blocking scripts, image dimensions, oversized image assets,
-  metadata, and same-origin links.
-- Optional
-  [Google PageSpeed Insights v5](https://developers.google.com/speed/docs/insights/v5/reference/pagespeedapi/runpagespeed)
-  enrichment for rendered mobile
-  Lighthouse performance, accessibility, and SEO scores and failures. If it is
-  disabled, unavailable, or rate-limited, Mend clearly falls back to the bounded
-  static HTML audit.
-- SSRF protections, redirect limits, response-size limits, fetch timeouts, and
-  bounded resource probes.
-- Deterministic patch generator for the controlled demo issues, with full
-  original/proposed source and unified diffs.
-- Patch review modal that records waiting, approved, and rejected states without
-  mutating a repository.
-- Branch-first apply action that verifies approval, validates the original
-  source context, and records a demo branch and commit without changing main.
-- Before/after verification against the actual patched source snapshot, with
-  score deltas, resolved and remaining issues, regression checks, and saved
-  audit IDs for comparison.
-- Imperative WebMCP registration through `document.modelContext` with feature
-  detection, abortable component lifecycle cleanup, and a visible registered
-  tool status panel.
-- Compact WebMCP responses backed by the same audit API as the human UI,
-  including issue inspection and before/after comparison.
-- Controlled demo repository connection with server-side file listing, safe
-  relative-path validation, source-hint verification, and a read-only source
-  viewer with highlighted mapped lines.
-- Versioned browser workspace recovery plus signed HTTP-only approval/applied
-  receipts, so a reload restores the controlled flow without trusting client
-  state as source-mutation authority.
-- Activity timeline, loading states, recoverable errors, accessible dialogs,
-  and a focused full-screen mobile issue detail sheet.
-- Native scrapbook visual system adapted from the Deal No Mercy iOS app, with
-  paper surfaces, grid-paper backgrounds, sticker badges, hard shadows, and
-  accessible high-contrast action states.
+The public build was re-verified on **August 31, 2026**:
 
-## Run locally
+| Check | Result |
+| --- | --- |
+| Production deployment | [HTTPS live site](https://mend-webmcp.vercel.app/) · HTTP 200 |
+| WebMCP registration | 13 tools registered on the dashboard |
+| Rendered mobile audit | Performance **98** · Accessibility **100** · SEO **100** |
+| Repair verification | Accessibility **74 → 89** |
+| Targeted result | **1 resolved** · **0 regressions** |
+| Source safety | Approved branch snapshot created; checked-in `main` fixture unchanged |
+| Browser health | No console errors during the complete production flow |
 
-Requirements:
+The rendered score is a point-in-time Lighthouse result and may vary slightly
+between runs. The deterministic repair result is stable and requires no third-
+party credentials.
+
+## Try the complete demo
+
+You can test the core story in about ninety seconds:
+
+1. Open the [live Mend workspace](https://mend-webmcp.vercel.app/).
+2. Choose **Try the deterministic demo workspace**, then **Scan site**.
+3. Choose **Connect demo repo** and select the high-severity hero image issue.
+4. Choose **Propose safe fix** and inspect the exact `Hero.tsx` diff.
+5. Choose **Approve patch**, then **Apply approved patch**.
+6. Confirm Mend creates a `mend/fix/...` branch record from `main`.
+7. Choose **Verify branch snapshot** and confirm **74 → 89**, one resolved
+   issue, and zero regressions.
+
+No source content changes until **Apply approved patch**. Rejecting the patch
+ends the workflow without a source mutation.
+
+## WebMCP tools
+
+The dashboard exposes these tools only when the browser provides the imperative
+WebMCP API:
+
+| Tool | Purpose | Read-only |
+| --- | --- | :---: |
+| `scan_site` | Run a new bounded audit | No¹ |
+| `get_audit_summary` | Retrieve compact scores and high-impact counts | Yes |
+| `list_issues` | Filter findings by category and severity | Yes |
+| `inspect_issue` | Read evidence, impact, and source hints | Yes |
+| `compare_audits` | Calculate resolved issues, regressions, and score deltas | Yes |
+| `get_repository_status` | Inspect the connected repository identity | Yes |
+| `list_repository_files` | List bounded source-file metadata | Yes |
+| `inspect_source` | Read mapped source context for an issue | Yes |
+| `propose_fix` | Generate a candidate patch without applying it | No¹ |
+| `get_fix_diff` | Retrieve the exact proposed diff | Yes |
+| `request_fix_approval` | Surface a patch for human review | No¹ |
+| `apply_approved_fix` | Apply only a human-approved patch to a branch snapshot | No |
+| `verify_fix` | Re-run checks against the applied snapshot | No¹ |
+
+¹ These tools update Mend's workspace state but do not modify the target
+website. `apply_approved_fix` is the only source-changing operation, and it
+fails unless the server can verify explicit human approval.
+
+Every tool uses a compact JSON schema, bounded output, meaningful error states,
+and `untrustedContentHint`. Read-only tools declare `readOnlyHint: true`.
+
+## Safety model
+
+Mend treats scanned websites, audit evidence, and repository text as untrusted
+input.
+
+| Risk | Guardrail |
+| --- | --- |
+| SSRF and internal-network access | Blocks localhost, loopback, link-local, private IP ranges, private DNS results, and metadata-service targets |
+| Unbounded scanning | Enforces fetch timeouts, redirect limits, response-size limits, and bounded resource probes |
+| Prompt injection from page content | Never executes scanned code or lets page text redefine tool behavior |
+| Unrelated source edits | Requires a verified issue-to-source mapping; unmapped findings cannot offer repair actions |
+| Silent mutation | Shows the full original, proposed source, and unified diff before approval |
+| Forged client approval | Uses short-lived signed HTTP-only approval and applied-state receipts |
+| Direct changes to `main` | Applies only to an isolated controlled-demo branch snapshot |
+| Secret exposure | Keeps repository access and provider credentials server-side |
+| Regressions | Re-runs normalized checks and reports new findings explicitly |
+
+## Audit pipeline
+
+For any allowed public HTTPS URL, Mend performs bounded server-side analysis for:
+
+- Missing or empty image alternative text
+- Unlabeled form controls
+- Heading hierarchy problems
+- Render-blocking scripts
+- Missing image dimensions and oversized image assets
+- Missing metadata
+- Broken same-origin links
+
+When `MEND_PAGESPEED_ENABLED=true` and a PageSpeed API key is configured, Mend
+adds rendered mobile Lighthouse performance, accessibility, and SEO results. If
+that provider is disabled, unavailable, or rate-limited, the UI clearly reports
+the fallback to static HTML analysis rather than presenting it as Lighthouse.
+
+## Local development
+
+### Requirements
 
 - Node.js 20 or newer
 - npm
 
-Install dependencies and start the development server:
+### Start the app
 
-    npm install
-    npm run dev
+```bash
+git clone https://github.com/aryansk/mend-webmcp.git
+cd mend-webmcp
+npm ci
+cp .env.example .env.local
+npm run dev
+```
 
-Open http://localhost:3000, choose Try the deterministic demo workspace, and
-select Scan site. On the dashboard, choose Connect demo repo, select an issue,
-and choose Inspect source to open the checked-in source context. Choose Propose
-safe fix, review the exact diff, approve it, and choose Apply approved patch to
-create the isolated demo branch record. Then choose Verify branch snapshot to
-show the deterministic before/after result. You can also enter a public HTTPS
-URL to run the real server-side audit pipeline.
+Open [http://localhost:3000](http://localhost:3000). No environment variables
+are required for the deterministic demo, static audit pipeline, or WebMCP tool
+registration.
 
-Validation commands:
+### Environment variables
 
-    npm run lint
-    npm run typecheck
-    npm run test
-    npm run test:e2e
-    npm run build
+| Variable | Required | Purpose |
+| --- | :---: | --- |
+| `NEXT_PUBLIC_APP_URL` | No | Canonical deployed application URL |
+| `MEND_WORKSPACE_SECRET` | Production | Stable secret of at least 32 bytes for signed workspace receipts |
+| `MEND_PAGESPEED_ENABLED` | No | Set to `true` to enable rendered PageSpeed enrichment |
+| `PAGESPEED_API_KEY` | With PageSpeed | Server-side Google PageSpeed Insights key |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Not currently used | Reserved for future GitHub OAuth |
+| `GITHUB_APP_ID` / `GITHUB_PRIVATE_KEY` | Not currently used | Reserved for future GitHub App writes |
+| `DATABASE_URL` | Not currently used | Reserved for durable multi-user persistence |
+| `OPENAI_API_KEY` | Not currently used | Reserved for future model-generated patches |
 
-## Project structure
+Never commit `.env.local` or real credentials.
 
-    app/
-      dashboard/page.tsx       Dashboard route
-      error.tsx                Recoverable route error
-      globals.css              Design tokens and responsive UI
-      layout.tsx               Metadata and root layout
-      page.tsx                 Landing route
-    app/api/audits/
-      route.ts                 Audit API for scans and stored summaries
-    app/api/repositories/
-      route.ts                 Controlled repository connection API
-      files/route.ts            Safe file listing and reads
-      source/route.ts           Issue-to-source resolution
-    app/api/fixes/
-      route.ts                 Deterministic proposal and diff API
-      approval/route.ts          Human approval request API
-      decision/route.ts          Explicit approve/reject API
-      apply/route.ts             Branch-first approved-fix API
-    app/api/verify/
-      route.ts                 Controlled branch verification API
-    components/
-      audit-overview.tsx      Score cards and before/after verification
-      dashboard-page.tsx       Interactive audit workspace
-      icons.tsx                Small inline SVG icon set
-      landing-page.tsx         Landing and demo entry point
-      source-viewer.tsx        Read-only mapped source viewer
-    docs/
-      DEVPOST-SUBMISSION.md   Prepared submission copy and judge steps
-      DEMO-VIDEO.md            Narration, metadata, and video artifact details
-    public/
-      mend-dashboard-preview.png  Product screenshot used in this README
-    lib/
-      audit/
-        analyzers.ts           HTML issue normalization and score calculation
-        fetch.ts               Bounded safe fetch and resource probing
-        pagespeed.ts           Optional rendered mobile Lighthouse provider
-        scanner.ts             Audit orchestration and demo handling
-        summary.ts             Compact audit summary helpers
-        store.ts               Lightweight in-memory audit store
-        url-safety.ts          URL validation and SSRF protections
-        compare.ts             Before/after issue and score comparison
-      webmcp/
-        api.ts                 Browser client for audit tool requests
-        feature-detect.ts      document.modelContext detection
-        register-tools.ts      Abortable tool registration lifecycle
-        tool-schemas.ts        Compact JSON schemas and annotations
-        tools.ts               Audit and repository tool implementations
-        types.ts               Local WebMCP TypeScript contract
-      fixes/
-        apply.ts                Approval guard and branch snapshot store
-        diff.ts                Bounded unified diff generation
-        generator.ts           Controlled source patch plans
-        service.ts             Proposal and approval state helpers
-        store.ts               Lightweight in-memory fix store
-        errors.ts              Fix validation errors
-      verification/
-        service.ts              Before/after source verification orchestration
-        source-snapshot.ts      Checks against the patched source snapshot
-      workspace/
-        client-persistence.ts   Versioned reload-safe browser state
-        receipts.ts             Signed approval and apply recovery receipts
-      repository/
-        demo.ts                Controlled repository definition
-        files.ts               Bounded server-side file access
-        mapping.ts             Issue-to-source validation
-        store.ts               Lightweight connection store
-        types.ts               Repository domain types
-      demo-data.ts             Controlled demo audit
-      types.ts                 Stable domain model
-    demo-repo/
-      ...                       Checked-in intentional issue source
-    tests/unit/
-      analyzers.test.ts        Fixture coverage for normalized findings
-      summary.test.ts          Unit coverage for audit summaries
-      url-safety.test.ts       Private-target and URL validation coverage
-    tests/integration/
-      audits-route.test.ts     API and category-filter coverage
-      verify-route.test.ts     Apply-to-verify audit chain coverage
+### Validation commands
 
-## WebMCP tool surface
+| Command | What it checks |
+| --- | --- |
+| `npm run lint` | ESLint and Next.js rules |
+| `npm run typecheck` | Strict TypeScript compilation without emitting files |
+| `npm test` | Unit and integration tests with Vitest |
+| `npm run test:e2e` | Chromium end-to-end workflow with Playwright |
+| `npm run build` | Optimized Next.js production build |
 
-The dashboard registers these tools with `document.modelContext` when the
-browser exposes the imperative WebMCP API. `navigator.modelContext` is not
-used. Registration is tied to the dashboard lifecycle with an `AbortController`
-so stale tools are removed when the component unmounts.
+Install the Playwright browser once before the E2E suite if it is not already
+cached:
 
-- scan_site
-- get_audit_summary
-- list_issues
-- inspect_issue
-- compare_audits
-- get_repository_status
-- list_repository_files
-- inspect_source
-- propose_fix
-- get_fix_diff
-- request_fix_approval
-- apply_approved_fix
-- verify_fix
-
-`scan_site`, `propose_fix`, `request_fix_approval`, `apply_approved_fix`, and
-`verify_fix` update Mend workspace state, so they are explicitly annotated as
-non-read-only. `apply_approved_fix` verifies both approval status and source
-context before creating a controlled-demo branch snapshot; it never edits main.
-`verify_fix` reads the patched branch source and reruns deterministic checks
-against that snapshot, then returns saved before/after audit IDs for
-`compare_audits`. The remaining tools
-are read-only and return bounded JSON designed for agent reasoning. The
-repository and fix tools expose only the connected demo repository and never
-return credentials. GitHub OAuth, real remote commits, and pull requests remain
-future integration work.
-
-## Environment
-
-The environment template is `.env.example`. No environment variables are
-required for the bounded static audit, demo repository, or WebMCP tools.
-Production reload recovery requires a stable `MEND_WORKSPACE_SECRET` with at
-least 32 random bytes. Optional rendered scans require both
-`MEND_PAGESPEED_ENABLED=true` and a `PAGESPEED_API_KEY`.
-
-- NEXT_PUBLIC_APP_URL
-- MEND_WORKSPACE_SECRET
-- MEND_PAGESPEED_ENABLED
-- PAGESPEED_API_KEY
-- GITHUB_CLIENT_ID
-- GITHUB_CLIENT_SECRET
-- GITHUB_APP_ID
-- GITHUB_PRIVATE_KEY
-- DATABASE_URL
-- OPENAI_API_KEY
-
-Never commit real credentials.
-
-## Safety model
-
-Mend treats scanned pages and repository text as untrusted input. The audit
-pipeline validates URLs, blocks private-network targets and DNS results,
-manually validates redirects, bounds fetched content and resource probes, and
-uses request timeouts. The repository connector permits only known demo files,
-validates relative paths, bounds source reads, keeps all repository access on
-the server, and returns no tokens to the browser. Future remote source writes
-will require explicit human approval and preserve a reversible branch-based
-change path. Verification inspects the actual patched demo source snapshot; it
-does not claim that an external preview was deployed.
-
-The browser persists a versioned copy of the visible controlled workspace.
-Approval and applied-state recovery use short-lived signed HTTP-only receipts,
-so local storage alone cannot authorize a source-changing action. Server stores
-remain lightweight and in-memory, which is appropriate for the bounded demo but
-is not multi-user production storage.
+```bash
+npx playwright install chromium
+```
 
 ## How to test this submission
 
-1. Open the [live Mend demo](https://mend-webmcp.vercel.app/).
-2. Choose **Try the deterministic demo workspace**, then choose **Scan site**.
-3. Choose **Connect demo repo** and select the high-severity hero image issue.
-4. Choose **Propose safe fix**, review the exact diff, and choose **Approve
-   patch**.
-5. Choose **Apply approved patch**. Confirm the new `mend/fix/...` branch record
-   appears and the checked-in `main` fixture remains unchanged.
-6. Choose **Verify branch snapshot**. The expected result is **Fix verified**,
-   accessibility **74 → 89**, one resolved issue, and zero regressions.
-7. For the agent flow, use a browser with WebMCP enabled and ask the agent to
-   scan the demo site, list the high-impact issues, propose a fix, and show the
-   diff. Approve the patch in Mend before asking the agent to apply and verify
-   it.
+### Human UI
 
-The controlled demo is deterministic, so the same steps can be repeated without
-external credentials. The full tool-by-tool WebMCP checklist is below.
+Follow the seven steps in [Try the complete demo](#try-the-complete-demo). Also
+verify that an arbitrary rendered finding without a source hint shows **No
+source match** and keeps both repair actions disabled.
 
-## WebMCP local testing
+### Agent flow
 
-Use a WebMCP-capable browser. Chrome local testing requires the WebMCP testing
-flag at:
+Open the dashboard in ChatGPT's in-app browser or in a WebMCP-enabled Chrome
+build. For local Chrome testing, enable:
 
-    chrome://flags/#enable-webmcp-testing
+```text
+chrome://flags/#enable-webmcp-testing
+```
 
-Then:
+Then try this conversation:
 
-1. Start Mend with `npm run dev`.
-2. Open `http://localhost:3000/dashboard?site=https://demo.mend.local` in the
-   WebMCP-enabled browser.
-3. Confirm the dashboard status card changes from Checking to Ready and lists
-   the thirteen registered tool names.
-4. Ask the connected agent to call `scan_site` for `https://demo.mend.local`.
-5. Use the returned `auditId` with `get_audit_summary` and `list_issues`.
-6. Pass an issue ID from `list_issues` to `inspect_issue`.
-7. Click Connect demo repo in Mend and verify the repository card shows
-   `mend/demo-site` on `main`.
-8. Ask the agent to call `get_repository_status`, `list_repository_files`, and
-   `inspect_source` with `repo_demo_001` and an issue ID.
-9. Ask the agent to call `propose_fix` with `repo_demo_001` and
-   `issue_img_alt`, keeping the constraints about visual design and navigation.
-10. Ask the agent to call `get_fix_diff`, then `request_fix_approval` with the
-    returned fix ID.
-11. Review the exact diff in Mend and click Approve patch or Reject patch.
-    Confirm the activity log records the human decision.
-12. After approval, click Apply approved patch or ask the agent to call
-    `apply_approved_fix`. Confirm Mend shows a `mend/fix/...` branch, a commit
-    record, and that main source still contains the original issue.
-13. Click Verify branch snapshot or ask the agent to call `verify_fix`. Confirm
-    the before/after panel shows the targeted issue resolved, score deltas, and
-    zero regressions.
-14. Pass the saved audit IDs to `compare_audits` and confirm the same result.
-15. Reload after approval and confirm the proposal and approval-gated Apply
-    action are restored before continuing.
+> Scan the demo site and show me the highest-impact accessibility and
+> performance issues.
 
-Browsers without WebMCP still support manual scanning and issue inspection; the
-status card reports that the agent control plane is unavailable. Local
-development uses the same steps after `npm install` and `npm run dev`.
+> Inspect the hero image issue and propose a safe fix without changing the
+> visual design or navigation. Do not apply it.
+
+Review and approve the exact diff in Mend, then ask:
+
+> Apply the fix I approved, verify it, and compare the before and after audits.
+
+The expected tool sequence is:
+
+```text
+scan_site → get_audit_summary → list_issues → inspect_issue
+          → inspect_source → propose_fix → get_fix_diff
+          → request_fix_approval → [human approval]
+          → apply_approved_fix → verify_fix → compare_audits
+```
+
+The app also works without WebMCP: manual scanning, source inspection, patch
+review, approval, application, and verification remain available through the
+human UI.
+
+## Project structure
+
+```text
+app/
+├── api/                    Audit, repository, fix, approval, and verify routes
+├── dashboard/              Repair workspace route
+└── page.tsx                Landing page
+components/
+├── dashboard-page.tsx      Shared human/agent workspace state
+├── webmcp-bridge.tsx       WebMCP lifecycle integration
+├── audit-overview.tsx      Scores and before/after verification
+└── source-viewer.tsx       Read-only mapped source inspection
+lib/
+├── audit/                  Safe fetch, analyzers, PageSpeed, and comparison
+├── webmcp/                 Schemas, registration, callbacks, and API client
+├── repository/             Controlled repository and source mapping
+├── fixes/                  Proposal, diff, approval, and branch snapshot logic
+├── verification/           Patched-source replay and regression detection
+└── workspace/              Browser persistence and signed receipts
+demo-repo/                  Intentional issues for the deterministic story
+tests/
+├── unit/                   Domain and safety behavior
+├── integration/            Route-level workflows
+└── e2e/                    Full WebMCP and human-approval story
+```
+
+## Technology
+
+- Next.js App Router and React
+- TypeScript
+- Tailwind CSS
+- Cheerio for bounded HTML analysis
+- Google PageSpeed Insights for optional rendered Lighthouse data
+- Vitest for unit and integration tests
+- Playwright for end-to-end browser tests
+- Vercel for HTTPS production hosting
+
+No model API is required for the submitted workflow. The hackathon integration
+is WebMCP itself.
 
 ## Known limitations
 
-- Source patch generation and branch snapshots are limited to the checked-in
-  controlled demo repository.
-- Server audit, fix, branch, and verification stores are still intentionally
-  lightweight and in-memory. Browser state and signed receipts recover the
-  controlled single-user flow across reloads, but this is not a shared database.
-- Verification replays normalized checks against the approved branch snapshot;
-  it does not deploy or fetch a real preview environment.
-- Rendered audits depend on the optional Google PageSpeed API and automatically
-  fall back to static HTML analysis when unavailable.
-- GitHub OAuth, remote commits, and pull requests are not enabled. The app does
-  not imply that its controlled branch snapshot is a remote GitHub branch.
+- Source patching is intentionally limited to the checked-in controlled demo
+  repository.
+- Branches and commits are deterministic server-side snapshots, not remote
+  GitHub branches or pull requests.
+- Audit, fix, and verification stores are in memory; signed receipts and browser
+  state recover the controlled single-user flow, but this is not shared durable
+  persistence.
+- Verification replays checks against the patched source snapshot instead of a
+  deployed preview environment.
+- Rendered audits depend on the optional PageSpeed provider and fall back to
+  static analysis when it is unavailable.
+
+These boundaries keep the demonstration reliable and make every write
+reversible without overstating what happened externally.
+
+## Challenge submission
+
+- [Live application](https://mend-webmcp.vercel.app/)
+- [Devpost project](https://devpost.com/software/mend-safe-verified-website-repairs-with-webmcp)
+- [Public 2:15 demo video](https://www.youtube.com/watch?v=yrF_mGdoVAY)
+- [Demo narration and artifact notes](./docs/DEMO-VIDEO.md)
+- [Submission description and judge steps](./docs/DEVPOST-SUBMISSION.md)
 
 ## License
 
-Mend is released under the MIT License. See LICENSE.
+Mend is open source under the [MIT License](./LICENSE).
