@@ -1,4 +1,4 @@
-# Mend submission draft
+# Mend submitted project copy
 
 This document is the prepared copy for the OpenAI WebMCP Challenge submission.
 It is kept in the repository so the final form can be completed from one
@@ -12,7 +12,8 @@ Mend: Safe, verified website repairs with WebMCP
 
 - Live demo: https://mend-webmcp.vercel.app/
 - Public source: https://github.com/aryansk/mend-webmcp
-- Demo video: add the public YouTube URL after final publication
+- Devpost: https://devpost.com/software/mend-safe-verified-website-repairs-with-webmcp
+- Demo video: https://www.youtube.com/watch?v=yrF_mGdoVAY
 
 ## Description
 
@@ -43,7 +44,7 @@ fixture unchanged. Verification replays the normalized checks and surfaces
 resolved issues, remaining findings, score deltas, and regressions.
 
 In the deterministic demo, Mend repairs missing hero-image alternative text.
-The accessibility score moves from 74 to 83, one targeted issue is resolved, and
+The accessibility score moves from 74 to 89, one targeted issue is resolved, and
 zero regressions are reported.
 
 ## How to test this submission

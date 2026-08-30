@@ -171,3 +171,53 @@ test("mobile issue selection opens a focused detail sheet", async ({ page }) => 
   await page.getByRole("button", { name: "Back to issues" }).click();
   await expect(page.getByRole("button", { name: "Back to issues" })).toBeHidden();
 });
+
+test("unmapped live findings cannot offer demo source repairs", async ({ page }) => {
+  await page.goto("/dashboard?site=https%3A%2F%2Fdemo.mend.local%2F");
+  await page.getByRole("button", { name: "Connect demo repo" }).click();
+
+  await page.route("**/api/audits", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      contentType: "application/json",
+      status: 201,
+      body: JSON.stringify({
+        audit: {
+          id: "audit_live_unmapped",
+          siteUrl: "https://example.com/",
+          createdAt: new Date().toISOString(),
+          scores: { performance: 91, accessibility: 100, seo: 100 },
+          brokenLinks: 0,
+          checkedLinks: 3,
+          scanMode: "lighthouse_mobile",
+          scanProvider: "google_pagespeed",
+          issues: [
+            {
+              id: "issue_live_fcp",
+              auditId: "audit_live_unmapped",
+              category: "performance",
+              severity: "medium",
+              title: "First Contentful Paint",
+              description: "Rendered performance needs review.",
+              pageUrl: "https://example.com/",
+              evidence: "2.0 s",
+              estimatedImpact: "Improve the rendered performance result.",
+            },
+          ],
+        },
+      }),
+    });
+  });
+
+  await page.getByRole("button", { name: "Rescan site" }).click();
+
+  await expect(page.getByText("No verified source match for this finding")).toBeVisible();
+  await expect(page.getByRole("button", { name: "No source match" })).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "No mapped fix available" }),
+  ).toBeDisabled();
+});

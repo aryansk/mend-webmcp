@@ -409,6 +409,7 @@ export function DashboardPage({
     [audit, selectedIssueId],
   );
   const displayIssue = selectedIssue ?? EMPTY_ISSUE;
+  const hasMappedSource = Boolean(repository && displayIssue.sourceHint);
   const issues = audit?.issues ?? [];
   const summary = audit
     ? getAuditSummary(audit)
@@ -540,6 +541,13 @@ export function DashboardPage({
       return;
     }
 
+    if (!selectedIssue.sourceHint) {
+      setNotice(
+        "This finding has no verified source mapping in the connected repository.",
+      );
+      return;
+    }
+
     setSourceError("");
 
     try {
@@ -583,6 +591,13 @@ export function DashboardPage({
       if (!repository) {
         setNotice("Connect the controlled demo repository before proposing a fix.");
       }
+      return;
+    }
+
+    if (!selectedIssue.sourceHint) {
+      setNotice(
+        "Mend needs a verified source mapping before it can propose a patch.",
+      );
       return;
     }
 
@@ -1210,7 +1225,9 @@ export function DashboardPage({
                           displayIssue.sourceHint.lineStart +
                           "–" +
                           displayIssue.sourceHint.lineEnd
-                        : "Connect a repository to inspect source"}
+                        : repository
+                          ? "No verified source match for this finding"
+                          : "Connect a repository to inspect source"}
                     </span>
                   </div>
                   {displayIssue.sourceHint ? (
@@ -1236,22 +1253,29 @@ export function DashboardPage({
                   className="secondary-button full-width"
                   type="button"
                   onClick={handleInspectSource}
+                  disabled={!hasMappedSource}
                 >
                   <ExternalLink width={15} height={15} />
-                  {repository ? "Inspect source" : "Connect source first"}
+                  {hasMappedSource
+                    ? "Inspect source"
+                    : repository
+                      ? "No source match"
+                      : "Connect source first"}
                 </button>
                 <button
                   className="primary-button full-width"
                   type="button"
                   onClick={handleProposeFix}
-                  disabled={!repository || isProposing}
+                  disabled={!hasMappedSource || isProposing}
                 >
                   <Sparkle width={15} height={15} />
                   {isProposing
                     ? "Preparing fix…"
-                    : repository
+                    : hasMappedSource
                       ? "Propose safe fix"
-                      : "Connect source to propose"}
+                      : repository
+                        ? "No mapped fix available"
+                        : "Connect source to propose"}
                 </button>
               </div>
               <p className="approval-note">

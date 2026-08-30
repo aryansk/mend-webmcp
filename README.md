@@ -4,8 +4,7 @@ Mend is an agent-native website repair workspace. It turns a website audit into
 a shared human and agent workflow: scan, understand, propose, approve, fix, and
 verify.
 
-The project was submitted to the OpenAI WebMCP Challenge and is now being
-hardened on a separate post-submission branch. The current local build has a
+The project is submitted to the OpenAI WebMCP Challenge. The current build has a
 bounded server-side audit pipeline, optional rendered mobile Lighthouse results,
 thirteen feature-detected WebMCP tools, a controlled repository source viewer,
 an approval-gated branch snapshot flow, source-backed verification, reload-safe
@@ -18,9 +17,15 @@ recovery. The controlled demo keeps its checked-in main fixture unchanged.
 
 Public source: [github.com/aryansk/mend-webmcp](https://github.com/aryansk/mend-webmcp)
 
-The public URL runs the hardened build from `codex/post-submission-hardening`.
-Its production WebMCP registration, direct tool execution, approval recovery,
-apply, verification, and audit comparison were verified on August 27, 2026.
+Submission: [Devpost project page](https://devpost.com/software/mend-safe-verified-website-repairs-with-webmcp)
+
+Demo video: [Watch the 2:15 public YouTube demo](https://www.youtube.com/watch?v=yrF_mGdoVAY)
+
+The hardened build is merged into the default branch and deployed at the public
+URL. On August 31, 2026, the production site was verified with direct execution
+of all 13 WebMCP tools, approval recovery after reload, safe branch application,
+source-backed verification, and audit comparison. A fresh rendered mobile
+Lighthouse scan returned Performance 95, Accessibility 100, and SEO 100.
 
 ## Product preview
 
@@ -286,10 +291,9 @@ so local storage alone cannot authorize a source-changing action. Server stores
 remain lightweight and in-memory, which is appropriate for the bounded demo but
 is not multi-user production storage.
 
-## How to test this hardening branch
+## How to test this submission
 
-1. Run `npm install`, then `npm run dev`, and open
-   `http://localhost:3000/`.
+1. Open the [live Mend demo](https://mend-webmcp.vercel.app/).
 2. Choose **Try the deterministic demo workspace**, then choose **Scan site**.
 3. Choose **Connect demo repo** and select the high-severity hero image issue.
 4. Choose **Propose safe fix**, review the exact diff, and choose **Approve
@@ -344,9 +348,8 @@ Then:
     action are restored before continuing.
 
 Browsers without WebMCP still support manual scanning and issue inspection; the
-status card reports that the agent control plane is unavailable. Any later
-deployment must repeat the HTTPS preview and production WebMCP verification
-sequence before it is called successful.
+status card reports that the agent control plane is unavailable. Local
+development uses the same steps after `npm install` and `npm run dev`.
 
 ## Known limitations
 
