@@ -1,11 +1,11 @@
 # Mend demo video package
 
-## Local artifact
+## Published artifact
 
-- File: `/tmp/mend-demo.mp4`
-- Duration: 67.23 seconds
-- Format: H.264 MP4, 1920x1080, 30 fps, AAC narrated audio
-- Thumbnail: `/tmp/mend-demo-poster.jpg`
+- Public URL: https://www.youtube.com/watch?v=yrF_mGdoVAY
+- Duration: 135 seconds
+- Visibility: Public
+- Audio: Narrated audio is present in the published video
 
 ## YouTube metadata
 
